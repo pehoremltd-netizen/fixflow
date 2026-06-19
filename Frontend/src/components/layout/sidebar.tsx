@@ -60,6 +60,8 @@ const roleNavItems: Record<UserRole, { label: string; items: NavItem[] }[]> = {
         { label: "Attendance", href: "/admin/attendance", icon: Clock },
         { label: "Sites & Facilities", href: "/admin/sites", icon: Building2 },
         { label: "Operations Console", href: "/admin/facility-operations", icon: Maximize },
+        { label: "Facility Reports", href: "/admin/facility-reports", icon: FileText },
+        { label: "Pending Tasks", href: "/admin/facility-reports/pending-tasks", icon: ClipboardList },
         { label: "Inspections", href: "/admin/inspections", icon: ClipboardCheck },
         { label: "Work Orders", href: "/admin/work-orders", icon: Wrench },
         { label: "PM Schedule", href: "/admin/pm-schedule", icon: CalendarClock },
