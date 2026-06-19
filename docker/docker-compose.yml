@@ -1,0 +1,11 @@
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../backend/Dockerfile
+    ports:
+      - "4000:4000"
+    env_file:
+      - ../backend/.env
+    restart: unless-stopped
+    container_name: fixflow-backend
