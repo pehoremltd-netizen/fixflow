@@ -5,6 +5,7 @@ import {
   type ReportActivity,
   type ReportEntry,
   type ReportFrequency,
+  type CoverMemo,
   getReportActivities,
   getReportSections,
   loadReport,
@@ -166,92 +167,275 @@ export async function exportFacilityReportExcel(
   URL.revokeObjectURL(url);
 }
 
+/* ── PDF Export Helpers ── */
+const PAGE_W = 210;
+const PAGE_H = 297;
+const MARGIN = 16;
+const USABLE_W = PAGE_W - MARGIN * 2;
+const GOLD = [212, 160, 23] as [number, number, number];
+const DARK = [26, 26, 26] as [number, number, number];
+const LIGHT_GRAY = [245, 245, 245] as [number, number, number];
+
+function pdfFooter(doc: jsPDF, pageNum: number, totalPages: number, dateStr: string) {
+  const y = PAGE_H - 12;
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(120, 120, 120);
+  doc.text("FixFlow Facility Management System | Confidential", MARGIN, y);
+  doc.text(`Page ${pageNum} of ${totalPages}`, PAGE_W / 2, y, { align: "center" });
+  doc.text(`Generated: ${dateStr}`, PAGE_W - MARGIN, y, { align: "right" });
+}
+
+function drawGoldLine(doc: jsPDF, y: number) {
+  doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+  doc.setLineWidth(0.6);
+  doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+}
+
+/* ── MASTER PDF EXPORT ── */
 export async function exportFacilityReportPDF(
   date: string,
-  frequency: ReportFrequency | "All"
+  frequency: ReportFrequency | "All",
+  coverMemo?: CoverMemo,
+  docRef?: string
 ): Promise<void> {
-  const doc = new jsPDF("landscape", "mm", "a4");
-  const pageWidth = doc.internal.pageSize.getWidth();
-
+  const doc = new jsPDF("p", "mm", "a4");
+  const report = loadReport(date);
   const sections = getReportSections();
-  const sectionData = buildRows(sections, frequency, date);
+  const todayFormatted = new Date().toLocaleDateString("en-US", {
+    year: "numeric", month: "long", day: "numeric",
+  });
 
-  let hasData = false;
-  let titleRendered = false;
-  let currentY = 15;
-
-  for (const [idx, { section, rows }] of sectionData.entries()) {
-    if (rows.length === 0) continue;
-    hasData = true;
-
-    if (idx > 0) {
-      doc.addPage();
-      currentY = 15;
+  // Build activity cards data (filtered by frequency)
+  const cards: { activity: ReportActivity; entry?: ReportEntry }[] = [];
+  for (const section of sections) {
+    const activities = filterActivities(getReportActivities(section), frequency);
+    for (const act of activities) {
+      cards.push({ activity: act, entry: report.entries[act.id] });
     }
-
-    // Title (only on first page)
-    if (!titleRendered) {
-      titleRendered = true;
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.text(`FACILITY REPORT - ${date}`, pageWidth / 2, 15, { align: "center" });
-      currentY = 25;
-    }
-
-    // Section heading
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text(section, 14, currentY);
-
-    autoTable(doc, {
-      startY: currentY + 4,
-      head: [HEADERS],
-      body: rows,
-      styles: {
-        fontSize: 8,
-        cellPadding: 1.5,
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fillColor: [184, 134, 11],
-        textColor: [255, 255, 255],
-        fontStyle: "bold",
-        fontSize: 8,
-        halign: "center",
-      },
-      bodyStyles: {
-        fontSize: 8,
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245],
-      },
-      columnStyles: {
-        0: { cellWidth: 10, halign: "center" },
-        1: { cellWidth: 45 },
-        2: { cellWidth: 65 },
-        3: { cellWidth: 18, halign: "center" },
-        4: { cellWidth: 55 },
-        5: { cellWidth: 40 },
-        6: { cellWidth: 30 },
-      },
-      margin: { left: 14, right: 14 },
-      tableLineColor: [0, 0, 0],
-      tableLineWidth: 0.1,
-    });
-
-    currentY = (doc as any).lastAutoTable?.finalY ?? currentY;
   }
 
-  if (!hasData) {
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text(`FACILITY REPORT - ${date}`, pageWidth / 2, 20, { align: "center" });
+  const recipients = coverMemo?.recipients?.length
+    ? coverMemo.recipients.join(" | ")
+    : "Admin | Audit | Finance | COO";
+
+  const preparedBy = coverMemo?.preparedBy || "Admin User";
+  const refNumber = docRef || "FF-2026-001";
+
+  /* ── COVER PAGE ── */
+  let y = MARGIN + 6;
+
+  // Header line
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("FixFlow Facility Management System", MARGIN, y);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Ref: ${refNumber}`, PAGE_W - MARGIN, y, { align: "right" });
+  y += 5;
+  drawGoldLine(doc, y);
+  y += 14;
+
+  // Title block
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("FACILITY ACTIVITY REPORT", PAGE_W / 2, y, { align: "center" });
+  y += 9;
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Daily Activities, Processes and Documentation", PAGE_W / 2, y, { align: "center" });
+  y += 16;
+
+  // Info block
+  const infoX = MARGIN + 20;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("Facility:", infoX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text("Ogba Facility", infoX + 32, y);
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("Submitted to:", infoX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(recipients, infoX + 32, y);
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("Prepared by:", infoX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(preparedBy, infoX + 32, y);
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("Date:", infoX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(todayFormatted, infoX + 32, y);
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  doc.text("Report Period:", infoX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(frequency === "All" ? "All Activities" : frequency, infoX + 32, y);
+  y += 14;
+
+  drawGoldLine(doc, y);
+  y += 10;
+
+  // Cover message
+  if (coverMemo?.message?.trim()) {
     doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+    doc.text("Message:", MARGIN, y);
+    y += 6;
+    doc.setFontSize(9.5);
     doc.setFont("helvetica", "normal");
-    doc.text("No report entries for this frequency.", pageWidth / 2, 30, {
-      align: "center",
-    });
+    doc.setTextColor(50, 50, 50);
+    const msgLines = doc.splitTextToSize(coverMemo.message.trim(), USABLE_W);
+    for (const line of msgLines) {
+      if (y > PAGE_H - 24) {
+        pdfFooter(doc, 1, 1, todayFormatted);
+        doc.addPage();
+        y = MARGIN + 10;
+      }
+      doc.text(line, MARGIN, y);
+      y += 5;
+    }
+  }
+
+  // Cover page footer
+  pdfFooter(doc, 1, 1, todayFormatted);
+
+  /* ── ACTIVITY CARDS PAGES ── */
+  if (cards.length === 0) {
+    doc.save(`Facility_Report_${date}.pdf`);
+    return;
+  }
+
+  // Calculate total pages for footer
+  // Approximate: each card takes about 40-55mm, so 3-4 per page
+  const CARD_HEIGHT = 44;
+  const cardsPerPage = 3;
+  const totalActivityPages = Math.max(1, Math.ceil(cards.length / cardsPerPage));
+  const totalPages = 1 + totalActivityPages;
+  let pageNum = 2;
+
+  for (let i = 0; i < cards.length; i += cardsPerPage) {
+    doc.addPage();
+    y = MARGIN + 6;
+
+    // Section title on each activity page
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+    doc.text("Activity Report Details", PAGE_W / 2, y, { align: "center" });
+    y += 3;
+    drawGoldLine(doc, y);
+    y += 8;
+
+    for (let j = i; j < Math.min(i + cardsPerPage, cards.length); j++) {
+      const { activity, entry } = cards[j];
+      const cardStartY = y;
+      const cardH = Math.min(CARD_HEIGHT, PAGE_H - y - 20);
+      if (cardH < 30) {
+        pdfFooter(doc, pageNum, totalPages, todayFormatted);
+        doc.addPage();
+        pageNum++;
+        y = MARGIN + 6;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Activity Report Details", PAGE_W / 2, y, { align: "center" });
+        y += 3;
+        drawGoldLine(doc, y);
+        y += 8;
+      }
+
+      // Card background
+      doc.setFillColor(LIGHT_GRAY[0], LIGHT_GRAY[1], LIGHT_GRAY[2]);
+      doc.roundedRect(MARGIN, y, USABLE_W, cardH, 1.5, 1.5, "F");
+      doc.setDrawColor(210, 210, 210);
+      doc.roundedRect(MARGIN, y, USABLE_W, cardH, 1.5, 1.5, "S");
+
+      // Card content
+      let cy = y + 5;
+
+      // Activity name
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+      doc.text(activity.activity, MARGIN + 4, cy);
+      cy += 6;
+
+      // Frequency badge
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.setTextColor(255, 255, 255);
+      const freqW = doc.getTextWidth(activity.frequency) + 5;
+      doc.roundedRect(MARGIN + 4, cy - 3, freqW, 5.5, 1, 1, "F");
+      doc.text(activity.frequency, MARGIN + 4 + freqW / 2, cy + 0.5, { align: "center" });
+      doc.setTextColor(50, 50, 50);
+      cy += 8;
+
+      // Report Update
+      if (entry?.reportUpdate) {
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+        doc.text("Report Update:", MARGIN + 4, cy);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(60, 60, 60);
+        const updateLines = doc.splitTextToSize(entry.reportUpdate, USABLE_W - 20);
+        doc.text(updateLines, MARGIN + 4, cy + 4);
+        cy += 6 + updateLines.length * 4;
+      } else {
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(160, 160, 160);
+        doc.text("No report update provided", MARGIN + 4, cy);
+        cy += 6;
+      }
+
+      // Notes
+      if (entry?.notes) {
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+        doc.text("Notes:", MARGIN + 4, cy);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(60, 60, 60);
+        const notesLines = doc.splitTextToSize(entry.notes, USABLE_W - 20);
+        doc.text(notesLines, MARGIN + 4, cy + 4);
+        cy += 6 + notesLines.length * 4;
+      }
+
+      // Timestamp
+      if (entry?.timestamp) {
+        const ts = new Date(entry.timestamp).toLocaleTimeString("en-US", {
+          hour: "numeric", minute: "2-digit", hour12: true,
+        });
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(140, 140, 140);
+        doc.text(`Logged: ${ts}`, PAGE_W - MARGIN - 4, cy, { align: "right" });
+      }
+
+      y = cardStartY + cardH + 6;
+    }
+
+    pdfFooter(doc, pageNum, totalPages, todayFormatted);
+    pageNum++;
   }
 
   doc.save(`Facility_Report_${date}.pdf`);

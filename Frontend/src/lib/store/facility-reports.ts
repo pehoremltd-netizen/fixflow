@@ -33,8 +33,24 @@ export interface PendingTask {
   updatedAt: string;
 }
 
+export interface CoverMemo {
+  recipients: string[];
+  message: string;
+  preparedBy: string;
+}
+
+export interface ActivityFieldStore {
+  [activityId: string]: {
+    reportUpdate: string;
+    notes: string;
+  };
+}
+
 const STORAGE_KEY = "fixflow-facility-reports";
 const PENDING_TASKS_KEY = "fixflow-facility-pending-tasks";
+const COVER_MEMO_KEY = "fixflow-cover-memo";
+const DOC_REF_COUNTER_KEY = "fixflow-doc-ref-counter";
+const ACTIVITY_FIELDS_KEY = "fixflow-activity-fields";
 
 const REPORT_ACTIVITIES: ReportActivity[] = [
   // Ogba Facility - Daily
@@ -160,6 +176,90 @@ function deletePendingTask(id: string): void {
   savePendingTasks(filtered);
 }
 
+/* ── Cover Memo ── */
+function getCurrentUserName(): string {
+  if (typeof window === "undefined") return "Admin User";
+  try {
+    const token = localStorage.getItem("fixflow-token");
+    if (!token) return "Admin User";
+    const b64 = token.split(".")[1];
+    const payload = JSON.parse(atob(b64));
+    const raw = localStorage.getItem("fixflow-generated-users");
+    if (raw) {
+      const users = JSON.parse(raw);
+      const user = users[payload.email];
+      if (user?.profile?.full_name) return user.profile.full_name;
+    }
+    return payload.email || "Admin User";
+  } catch {
+    return "Admin User";
+  }
+}
+
+function loadCoverMemo(): CoverMemo {
+  if (typeof window === "undefined") return { recipients: [], message: "", preparedBy: getCurrentUserName() };
+  try {
+    const raw = localStorage.getItem(COVER_MEMO_KEY);
+    if (raw) return JSON.parse(raw) as CoverMemo;
+  } catch {}
+  return { recipients: [], message: "", preparedBy: getCurrentUserName() };
+}
+
+function saveCoverMemo(memo: CoverMemo): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(COVER_MEMO_KEY, JSON.stringify(memo));
+}
+
+/* ── Document Reference ── */
+function getDocumentRef(): string {
+  if (typeof window === "undefined") return "FF-2026-001";
+  try {
+    const raw = localStorage.getItem(DOC_REF_COUNTER_KEY);
+    const counter = raw ? parseInt(raw, 10) : 0;
+    const year = new Date().getFullYear();
+    return `FF-${year}-${String(counter).padStart(3, "0")}`;
+  } catch {
+    return "FF-2026-001";
+  }
+}
+
+function incrementDocumentCounter(): string {
+  if (typeof window === "undefined") return "FF-2026-001";
+  try {
+    const raw = localStorage.getItem(DOC_REF_COUNTER_KEY);
+    let counter = raw ? parseInt(raw, 10) : 0;
+    counter++;
+    localStorage.setItem(DOC_REF_COUNTER_KEY, String(counter));
+    const year = new Date().getFullYear();
+    return `FF-${year}-${String(counter).padStart(3, "0")}`;
+  } catch {
+    return "FF-2026-001";
+  }
+}
+
+/* ── Activity Field Persistence ── */
+function loadActivityFields(): ActivityFieldStore {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(ACTIVITY_FIELDS_KEY);
+    if (raw) return JSON.parse(raw) as ActivityFieldStore;
+  } catch {}
+  return {};
+}
+
+function saveActivityField(activityId: string, field: "reportUpdate" | "notes", value: string): void {
+  if (typeof window === "undefined") return;
+  const fields = loadActivityFields();
+  if (!fields[activityId]) fields[activityId] = { reportUpdate: "", notes: "" };
+  fields[activityId][field] = value;
+  localStorage.setItem(ACTIVITY_FIELDS_KEY, JSON.stringify(fields));
+}
+
+function loadActivityField(activityId: string, field: "reportUpdate" | "notes"): string {
+  const fields = loadActivityFields();
+  return fields[activityId]?.[field] ?? "";
+}
+
 export {
   generateId,
   getNextTaskNumber,
@@ -173,6 +273,13 @@ export {
   addPendingTask,
   updatePendingTask,
   deletePendingTask,
+  loadCoverMemo,
+  saveCoverMemo,
+  getDocumentRef,
+  incrementDocumentCounter,
+  loadActivityField,
+  saveActivityField,
+  getCurrentUserName,
   REPORT_ACTIVITIES,
   STORAGE_KEY,
   PENDING_TASKS_KEY,
