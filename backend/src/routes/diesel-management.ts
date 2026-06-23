@@ -87,16 +87,6 @@ function detectAnomalies(computed: ReturnType<typeof sdcsCompute>, benchmarkLph:
   return { flags, alerts };
 }
 
-function pushAudit(auditTrail: any[], action: string, performedBy: string, description: string, changes?: Record<string, { old: any; new: any }>) {
-  auditTrail.push({
-    action,
-    performed_by: performedBy || "system",
-    description,
-    changes: changes || null,
-    timestamp: new Date().toISOString(),
-  });
-}
-
 async function logAuditTrail(logId: string, action: string, performedBy: string, fieldName: string, oldVal: string, newVal: string) {
   await supabase.from("diesel_audit_trail").insert({
     diesel_log_id: logId,
@@ -126,7 +116,7 @@ router.get("/", async (req: Request, res: Response) => {
   const { generator_id, facility_id, status, start_date, end_date, limit } = req.query as Record<string, string>;
   let query = supabase
     .from("diesel_logs")
-    .select("*, generators(name, tank_capacity, expected_lph, benchmark_lph), sites(name)")
+    .select("*, generators(name, tank_capacity, expected_lph), sites(name)")
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -200,11 +190,11 @@ router.get("/generators", async (req: Request, res: Response) => {
     const { data: sites } = await supabase.from("sites").select("id").limit(1);
     const facilityId = sites?.[0]?.id || null;
     const defaults = [
-      { name: "Generator 1 (Main)", facility_id: facilityId, tank_capacity: 1000, expected_lph: 25, benchmark_lph: 25, max_daily_usage: 600 },
-      { name: "Generator 2 (Standby)", facility_id: facilityId, tank_capacity: 500, expected_lph: 20, benchmark_lph: 20, max_daily_usage: 480 },
-      { name: "Generator 3 (Workshop)", facility_id: facilityId, tank_capacity: 300, expected_lph: 15, benchmark_lph: 15, max_daily_usage: 360 },
-      { name: "Generator 4 (Admin Block)", facility_id: facilityId, tank_capacity: 200, expected_lph: 12, benchmark_lph: 12, max_daily_usage: 288 },
-      { name: "Generator 5 (Quarters)", facility_id: facilityId, tank_capacity: 750, expected_lph: 22, benchmark_lph: 22, max_daily_usage: 528 },
+      { name: "Generator 1 (Main)", facility_id: facilityId, tank_capacity: 1000, expected_lph: 25, max_daily_usage: 600 },
+      { name: "Generator 2 (Standby)", facility_id: facilityId, tank_capacity: 500, expected_lph: 20, max_daily_usage: 480 },
+      { name: "Generator 3 (Workshop)", facility_id: facilityId, tank_capacity: 300, expected_lph: 15, max_daily_usage: 360 },
+      { name: "Generator 4 (Admin Block)", facility_id: facilityId, tank_capacity: 200, expected_lph: 12, max_daily_usage: 288 },
+      { name: "Generator 5 (Quarters)", facility_id: facilityId, tank_capacity: 750, expected_lph: 22, max_daily_usage: 528 },
     ];
     const { data: seeded, error: seedErr } = await supabase.from("generators").insert(defaults).select();
     if (!seedErr && seeded) data = seeded;
@@ -216,8 +206,7 @@ router.get("/generators", async (req: Request, res: Response) => {
 /* ─── POST /generators — Create generator ─── */
 router.post("/generators", async (req: Request, res: Response) => {
   const body = { ...req.body };
-  if (body.benchmark_lph !== undefined && !body.expected_lph) body.expected_lph = body.benchmark_lph;
-  if (body.expected_lph !== undefined && body.benchmark_lph === undefined) body.benchmark_lph = body.expected_lph;
+  delete body.benchmark_lph;
   const { data, error } = await supabase.from("generators").insert(body).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
   res.status(201).json({ data });
@@ -226,8 +215,7 @@ router.post("/generators", async (req: Request, res: Response) => {
 /* ─── PATCH /generators/:id ─── */
 router.patch("/generators/:id", async (req: Request, res: Response) => {
   const body = { ...req.body };
-  if (body.benchmark_lph !== undefined && !body.expected_lph) body.expected_lph = body.benchmark_lph;
-  if (body.expected_lph !== undefined && body.benchmark_lph === undefined) body.benchmark_lph = body.expected_lph;
+  delete body.benchmark_lph;
   const { data, error } = await supabase.from("generators").update(body).eq("id", req.params.id).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
   res.json({ data });
@@ -304,7 +292,7 @@ router.get("/inactive-detection", async (req: Request, res: Response) => {
 router.get("/:id", async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from("diesel_logs")
-    .select("*, generators(name, tank_capacity, expected_lph, benchmark_lph), sites(name)")
+    .select("*, generators(name, tank_capacity, expected_lph), sites(name)")
     .eq("id", req.params.id)
     .single();
   if (error) { res.status(404).json({ error: "Log not found" }); return; }
@@ -355,7 +343,7 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const benchmarkLph = gen.benchmark_lph || gen.expected_lph || 0;
+  const benchmarkLph = gen.expected_lph || 0;
   const tankCapacity = gen.tank_capacity || 1000;
   const maxDailyUsage = gen.max_daily_usage || 500;
 
@@ -371,14 +359,6 @@ router.post("/", async (req: Request, res: Response) => {
   // Anomaly detection
   const { flags, alerts: alertList } = detectAnomalies(computed, benchmarkLph, tankCapacity, historicalAvg, maxDailyUsage);
 
-  // Build audit trail
-  const auditTrail: any[] = [];
-  pushAudit(auditTrail, "CREATE", b.created_by || "", "Diesel record created", {
-    idr: { old: null, new: idr },
-    fdr: { old: null, new: fdr },
-    diesel_supplied: { old: null, new: b.diesel_supplied ?? 0 },
-  });
-
   const payload = {
     date: b.date,
     facility_id: b.facility_id || gen.facility_id || null,
@@ -392,7 +372,6 @@ router.post("/", async (req: Request, res: Response) => {
     delivery_reference: b.delivery_reference || b.deliveryReference || "",
     previous_balance: computed.previousBalance,
     current_balance: computed.currentBalance,
-    estimated_run_hours: computed.estimatedRunHours,
     lph: computed.calculatedLph,
     expected_lph: benchmarkLph,
     variance: computed.variance,
@@ -400,7 +379,6 @@ router.post("/", async (req: Request, res: Response) => {
     status: "Submitted",
     remarks: b.remarks || "",
     created_by: b.created_by || "",
-    audit_trail: JSON.stringify(auditTrail),
   };
 
   const { data, error } = await supabase.from("diesel_logs").insert(payload).select().single();
@@ -444,7 +422,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
 
   const { data: gen } = await supabase.from("generators").select("*").eq("id", existing.generator_id).single();
-  const benchmarkLph = gen?.benchmark_lph || gen?.expected_lph || existing.expected_lph || 0;
+  const benchmarkLph = gen?.expected_lph || existing.expected_lph || 0;
   const tankCapacity = gen?.tank_capacity ?? 1000;
   const maxDailyUsage = gen?.max_daily_usage ?? 500;
 
@@ -460,11 +438,6 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const trackFields = ["idr", "fdr", "diesel_supplied", "supplier_name", "remarks"];
   const payload: any = {};
 
-  // Initialize audit trail from existing or empty array
-  let auditTrail: any[] = [];
-  try { auditTrail = typeof existing.audit_trail === "string" ? JSON.parse(existing.audit_trail) : existing.audit_trail || []; }
-  catch { auditTrail = []; }
-
   for (const f of trackFields) {
     if (b[f] !== undefined) {
       payload[f] = b[f];
@@ -477,15 +450,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   payload.diesel_used = computed.dieselUsed;
   payload.current_balance = computed.currentBalance;
-  payload.estimated_run_hours = computed.estimatedRunHours;
   payload.lph = computed.calculatedLph;
   payload.variance = computed.variance;
   payload.flags = flags;
-
-  if (Object.keys(changes).length > 0) {
-    pushAudit(auditTrail, "UPDATE", b.updated_by || "", "Record updated", changes);
-    payload.audit_trail = JSON.stringify(auditTrail);
-  }
 
   // Reactivate status if editing draft
   if (existing.status === "Draft") payload.status = "Submitted";
@@ -517,13 +484,6 @@ router.patch("/:id/approve", async (req: Request, res: Response) => {
     approved_at: new Date().toISOString(),
   };
 
-  // Update audit trail
-  let auditTrail: any[] = [];
-  try { auditTrail = typeof existing.audit_trail === "string" ? JSON.parse(existing.audit_trail) : existing.audit_trail || []; }
-  catch { auditTrail = []; }
-  pushAudit(auditTrail, "APPROVE", approvedBy, "Record approved by supervisor");
-  payload.audit_trail = JSON.stringify(auditTrail);
-
   const { data, error } = await supabase.from("diesel_logs").update(payload).eq("id", req.params.id).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
 
@@ -545,12 +505,6 @@ router.patch("/:id/reject", async (req: Request, res: Response) => {
     status: "Rejected",
     rejection_reason: req.body.rejection_reason || req.body.rejectionReason || "",
   };
-
-  let auditTrail: any[] = [];
-  try { auditTrail = typeof existing.audit_trail === "string" ? JSON.parse(existing.audit_trail) : existing.audit_trail || []; }
-  catch { auditTrail = []; }
-  pushAudit(auditTrail, "REJECT", rejectedBy, "Record rejected", { rejection_reason: { old: "", new: payload.rejection_reason } });
-  payload.audit_trail = JSON.stringify(auditTrail);
 
   const { data, error } = await supabase.from("diesel_logs").update(payload).eq("id", req.params.id).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
@@ -581,11 +535,7 @@ router.get("/:id/audit", async (req: Request, res: Response) => {
     .order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Also fetch embedded audit_trail if available
-  const { data: log } = await supabase.from("diesel_logs").select("audit_trail").eq("id", req.params.id).single();
-  const embeddedTrail = log?.audit_trail || [];
-
-  res.json({ data: { table_audit: data || [], embedded_audit: embeddedTrail } });
+  res.json({ data: data || [] });
 });
 
 export default router;
