@@ -114,11 +114,34 @@ router.get("/stats", async (req: Request, res: Response) => {
   res.json({ data: stats });
 });
 
-/* ─── GET /generators — List generators ─── */
+/* ─── GET /generators — List generators (auto-seeds if empty) ─── */
 router.get("/generators", async (req: Request, res: Response) => {
-  const { data, error } = await supabase.from("generators").select("*, sites(name)").order("name");
+  let { data, error } = await supabase.from("generators").select("*, sites(name)").order("name");
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Auto-seed defaults if table is empty
+  if (!data || data.length === 0) {
+    const { data: sites } = await supabase.from("sites").select("id").limit(1);
+    const facilityId = sites?.[0]?.id || null;
+    const defaults = [
+      { name: "Generator 1 (Main)", facility_id: facilityId, tank_capacity: 1000, expected_lph: 25, max_daily_usage: 600 },
+      { name: "Generator 2 (Standby)", facility_id: facilityId, tank_capacity: 500, expected_lph: 20, max_daily_usage: 480 },
+      { name: "Generator 3 (Workshop)", facility_id: facilityId, tank_capacity: 300, expected_lph: 15, max_daily_usage: 360 },
+      { name: "Generator 4 (Admin Block)", facility_id: facilityId, tank_capacity: 200, expected_lph: 12, max_daily_usage: 288 },
+      { name: "Generator 5 (Quarters)", facility_id: facilityId, tank_capacity: 750, expected_lph: 22, max_daily_usage: 528 },
+    ];
+    const { data: seeded, error: seedErr } = await supabase.from("generators").insert(defaults).select();
+    if (!seedErr && seeded) data = seeded;
+  }
+
   res.json({ data });
+});
+
+/* ─── POST /generators — Create generator ─── */
+router.post("/generators", async (req: Request, res: Response) => {
+  const { data, error } = await supabase.from("generators").insert(req.body).select().single();
+  if (error) { res.status(400).json({ error: error.message }); return; }
+  res.status(201).json({ data });
 });
 
 /* ─── GET /alerts — List unresolved alerts ─── */
@@ -129,6 +152,13 @@ router.get("/alerts", async (req: Request, res: Response) => {
     .eq("is_resolved", false)
     .order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ data });
+});
+
+/* ─── PATCH /generators/:id ─── */
+router.patch("/generators/:id", async (req: Request, res: Response) => {
+  const { data, error } = await supabase.from("generators").update(req.body).eq("id", req.params.id).select().single();
+  if (error) { res.status(400).json({ error: error.message }); return; }
   res.json({ data });
 });
 

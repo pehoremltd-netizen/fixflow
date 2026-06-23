@@ -274,6 +274,9 @@ export interface Artisan {
   phone: string;
   email: string;
   site: string;
+  bank_name: string;
+  account_number: string;
+  account_holder_name: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

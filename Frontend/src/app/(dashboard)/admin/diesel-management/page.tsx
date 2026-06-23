@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   fetchDieselLogs, fetchDieselStats, fetchGenerators, fetchAlerts,
   createDieselLog, updateDieselLog, approveDieselLog, rejectDieselLog,
-  deleteDieselLog, resolveAlert,
+  deleteDieselLog, resolveAlert, createGenerator,
 } from "@/lib/api/diesel-management";
 import type { DieselLog, Generator, DieselAlert } from "@/types";
 import {
@@ -44,6 +44,8 @@ export default function DieselManagementPage() {
   const [form, setForm] = useState<any>({});
   const [showApproval, setShowApproval] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [showGenForm, setShowGenForm] = useState(false);
+  const [genForm, setGenForm] = useState({ name: "", tank_capacity: 1000, expected_lph: 25, max_daily_usage: 600 });
 
   const load = async () => {
     setLoading(true);
@@ -255,10 +257,13 @@ export default function DieselManagementPage() {
                 </div>
                 <div>
                   <label className="text-xs text-text-tertiary block mb-1">Generator *</label>
-                  <select value={form.generator_id || ""} onChange={(e) => setForm({ ...form, generator_id: e.target.value })} className="w-full h-9 rounded-md border border-border bg-card text-sm text-foreground px-3">
-                    <option value="">Select...</option>
-                    {generators.filter((g) => g.is_active).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
+                  <div className="flex gap-1">
+                    <select value={form.generator_id || ""} onChange={(e) => setForm({ ...form, generator_id: e.target.value })} className="flex-1 h-9 rounded-md border border-border bg-card text-sm text-foreground px-3">
+                      <option value="">{generators.length === 0 ? "No generators found..." : "Select..."}</option>
+                      {generators.filter((g) => g.is_active).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => { setGenForm({ name: "", tank_capacity: 1000, expected_lph: 25, max_daily_usage: 600 }); setShowGenForm(true); }} className="h-9 w-9 rounded-md border border-border bg-card flex items-center justify-center text-text-tertiary hover:text-foreground hover:bg-accent shrink-0" title="Add generator">+</button>
+                  </div>
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs text-text-tertiary block mb-1">Operator *</label>
@@ -351,6 +356,32 @@ export default function DieselManagementPage() {
               <Button size="sm" onClick={() => showApproval && handleApprove(showApproval)}>
                 <CheckCircle2 className="h-3.5 w-3.5" /> Approve
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── GENERATOR FORM DIALOG ─── */}
+      <Dialog open={showGenForm} onOpenChange={setShowGenForm}>
+        <DialogContent className="bg-card border-input sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2"><Fuel className="h-4 w-4 text-primary" /> Add Generator</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div><label className="text-xs text-text-tertiary block mb-1">Name *</label><Input value={genForm.name} onChange={(e) => setGenForm({ ...genForm, name: e.target.value })} className="text-sm border-border bg-card text-foreground" /></div>
+            <div className="grid grid-cols-3 gap-2">
+              <div><label className="text-xs text-text-tertiary block mb-1">Tank (L)</label><Input type="number" value={genForm.tank_capacity} onChange={(e) => setGenForm({ ...genForm, tank_capacity: parseFloat(e.target.value) || 0 })} className="text-sm border-border bg-card text-foreground" /></div>
+              <div><label className="text-xs text-text-tertiary block mb-1">Exp LPH</label><Input type="number" value={genForm.expected_lph} onChange={(e) => setGenForm({ ...genForm, expected_lph: parseFloat(e.target.value) || 0 })} className="text-sm border-border bg-card text-foreground" /></div>
+              <div><label className="text-xs text-text-tertiary block mb-1">Max/D L</label><Input type="number" value={genForm.max_daily_usage} onChange={(e) => setGenForm({ ...genForm, max_daily_usage: parseFloat(e.target.value) || 0 })} className="text-sm border-border bg-card text-foreground" /></div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setShowGenForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={async () => {
+                if (!genForm.name.trim()) return;
+                await createGenerator(genForm);
+                setShowGenForm(false);
+                await load();
+              }} disabled={!genForm.name.trim()}>Add</Button>
             </div>
           </div>
         </DialogContent>

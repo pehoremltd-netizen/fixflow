@@ -18,7 +18,7 @@ export default function ArtisansPage() {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Artisan | null>(null);
-  const [form, setForm] = useState({ name: "", trade: "", phone: "", email: "", site: "" });
+  const [form, setForm] = useState({ name: "", trade: "", phone: "", email: "", site: "", bank_name: "", account_number: "", account_holder_name: "" });
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -31,13 +31,13 @@ export default function ArtisansPage() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", trade: "", phone: "", email: "", site: "" });
+    setForm({ name: "", trade: "", phone: "", email: "", site: "", bank_name: "", account_number: "", account_holder_name: "" });
     setShowForm(true);
   };
 
   const openEdit = (a: Artisan) => {
     setEditing(a);
-    setForm({ name: a.name, trade: a.trade, phone: a.phone, email: a.email, site: a.site });
+    setForm({ name: a.name, trade: a.trade, phone: a.phone, email: a.email, site: a.site, bank_name: a.bank_name, account_number: a.account_number, account_holder_name: a.account_holder_name });
     setShowForm(true);
   };
 
@@ -112,6 +112,7 @@ export default function ArtisansPage() {
                     <th className="text-left py-3 px-4 font-medium">Phone</th>
                     <th className="text-left py-3 px-4 font-medium">Email</th>
                     <th className="text-left py-3 px-4 font-medium">Site</th>
+                    <th className="text-left py-3 px-4 font-medium">Bank</th>
                     <th className="text-left py-3 px-4 font-medium">Status</th>
                     <th className="text-right py-3 px-4 font-medium">Actions</th>
                   </tr>
@@ -124,6 +125,7 @@ export default function ArtisansPage() {
                       <td className="py-3 px-4 text-text-tertiary">{a.phone || "—"}</td>
                       <td className="py-3 px-4 text-text-tertiary">{a.email || "—"}</td>
                       <td className="py-3 px-4 text-text-tertiary">{a.site || "—"}</td>
+                      <td className="py-3 px-4 text-text-tertiary text-xs">{a.bank_name ? `${a.bank_name} (••${a.account_number?.slice(-4)})` : "—"}</td>
                       <td className="py-3 px-4">
                         <button onClick={() => handleToggleActive(a)}>
                           <Badge className={cn("text-[10px] cursor-pointer", a.is_active ? "bg-success/10 text-success border-success/20" : "bg-destructive/10 text-destructive border-destructive/20")}>
@@ -177,6 +179,23 @@ export default function ArtisansPage() {
             <div>
               <label className="text-xs text-text-tertiary block mb-1">Site</label>
               <Input value={form.site} onChange={(e) => setForm({ ...form, site: e.target.value })} placeholder="Assigned site" className="text-sm border-border bg-card text-foreground" />
+            </div>
+            <div className="border-t border-border pt-3 mt-1">
+              <p className="text-xs font-medium text-foreground mb-2">Bank Account Details</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-text-tertiary block mb-1">Bank Name</label>
+                  <Input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} placeholder="e.g. Access Bank" className="text-sm border-border bg-card text-foreground" />
+                </div>
+                <div>
+                  <label className="text-xs text-text-tertiary block mb-1">Account Number</label>
+                  <Input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} placeholder="e.g. 0123456789" className="text-sm border-border bg-card text-foreground" />
+                </div>
+                <div>
+                  <label className="text-xs text-text-tertiary block mb-1">Account Holder Name</label>
+                  <Input value={form.account_holder_name} onChange={(e) => setForm({ ...form, account_holder_name: e.target.value })} placeholder="Name on account" className="text-sm border-border bg-card text-foreground" />
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>

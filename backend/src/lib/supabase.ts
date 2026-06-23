@@ -1,13 +1,20 @@
-import { createClient } from "@supabase/supabase-js";
-import ws from "ws";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import crossFetch from "cross-fetch";
 import { config } from "../config";
 
-export const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
+let _supabase: SupabaseClient | null = null;
+
+const handler: ProxyHandler<SupabaseClient> = {
+  get(_, prop: string | symbol) {
+    if (!_supabase) {
+      _supabase = createClient(config.supabaseUrl, config.supabaseServiceKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+        global: { fetch: crossFetch as any },
+      });
+    }
+    const value = (_supabase as any)[prop];
+    return typeof value === "function" ? value.bind(_supabase) : value;
   },
-  realtime: {
-    transport: ws as any,
-  },
-});
+};
+
+export const supabase = new Proxy({} as SupabaseClient, handler);

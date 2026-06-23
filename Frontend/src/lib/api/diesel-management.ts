@@ -25,6 +25,16 @@ export async function fetchGenerators(): Promise<Generator[]> {
   return res.data || [];
 }
 
+export async function createGenerator(data: Partial<Generator>): Promise<Generator> {
+  const res = await api.post<{ data: Generator }>("/diesel-management/generators", data);
+  return res.data;
+}
+
+export async function updateGenerator(id: string, data: Partial<Generator>): Promise<Generator> {
+  const res = await api.patch<{ data: Generator }>(`/diesel-management/generators/${id}`, data);
+  return res.data;
+}
+
 export async function fetchAlerts(): Promise<DieselAlert[]> {
   const res = await api.get<{ data: DieselAlert[] }>("/diesel-management/alerts");
   return res.data || [];
