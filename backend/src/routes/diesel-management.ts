@@ -162,9 +162,9 @@ router.get("/stats", async (req: Request, res: Response) => {
   const totalSupplied = logs?.reduce((s, l) => s + (l.diesel_supplied || 0), 0) || 0;
   const flaggedLogs = logs?.filter((l) => l.flags && l.flags.length > 0).length || 0;
 
-  const stats = {
+  const stats: Record<string, any> = {
     total_diesel_used: totalDieselUsed,
-    total_supplied,
+    total_supplied: totalSupplied,
     total_logs: logs?.length || 0,
     flagged_logs: flaggedLogs,
     gen_efficiency: genEfficiency,
