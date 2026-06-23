@@ -3,44 +3,101 @@ import { supabase } from "../lib/supabase";
 
 const router = Router();
 
-/* ─── Helpers ─── */
+/* ═══════════════════════════════════════════════════════════
+   SDCS HELPERS
+   ═══════════════════════════════════════════════════════════ */
 
-function computeFields(body: any, prevBal: number, genExpectedLph: number) {
-  const timeOn = body.time_on || body.timeOn;
-  const timeOff = body.time_off || body.timeOff;
+function sdcsCompute(body: any, prevBal: number, benchmarkLph: number, tankCapacity: number) {
   const idr = body.idr ?? 0;
   const fdr = body.fdr ?? 0;
   const dieselSupplied = body.diesel_supplied ?? body.dieselSupplied ?? 0;
-  const expectedLph = body.expected_lph ?? body.expectedLph ?? genExpectedLph;
 
-  const runHours = calcRunHours(timeOn, timeOff);
   const dieselUsed = idr - fdr;
+  const estimatedRunHours = benchmarkLph > 0 ? Math.round((dieselUsed / benchmarkLph) * 100) / 100 : 0;
   const previousBalance = prevBal;
-  const currentBalance = previousBalance + dieselSupplied - dieselUsed;
-  const lph = runHours > 0 ? dieselUsed / runHours : 0;
-  const variance = lph - expectedLph;
+  const currentBalance = Math.round((previousBalance + dieselSupplied - dieselUsed) * 100) / 100;
+  const calculatedLph = estimatedRunHours > 0 ? Math.round((dieselUsed / estimatedRunHours) * 100) / 100 : benchmarkLph;
+  const variance = Math.round((calculatedLph - benchmarkLph) * 100) / 100;
 
-  return { runHours, dieselUsed, previousBalance, currentBalance, lph, expectedLph, variance };
+  return {
+    dieselUsed, estimatedRunHours, previousBalance, currentBalance,
+    calculatedLph, benchmarkLph, variance,
+  };
 }
 
-function calcRunHours(on: string, off: string): number {
-  if (!on || !off) return 0;
-  const [oh, om] = on.split(":").map(Number);
-  const [fh, fm] = off.split(":").map(Number);
-  const onMin = oh * 60 + om;
-  const offMin = fh * 60 + fm;
-  return Math.max(0, (offMin - onMin) / 60);
+async function getHistoricalAvgDieselUsed(generatorId: string, excludeDate: string): Promise<number> {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const { data } = await supabase
+    .from("diesel_logs")
+    .select("diesel_used")
+    .eq("generator_id", generatorId)
+    .neq("status", "Rejected")
+    .lt("date", excludeDate)
+    .gte("date", thirtyDaysAgo.toISOString().split("T")[0]);
+  if (!data || data.length === 0) return 0;
+  const sum = data.reduce((s, r) => s + (r.diesel_used || 0), 0);
+  return sum / data.length;
 }
 
-function evaluateFlags(lph: number, expectedLph: number, currentBalance: number, tankCapacity: number, dieselUsed: number, maxDailyUsage: number): string[] {
+async function getLatestBalance(generatorId: string): Promise<number> {
+  const { data } = await supabase
+    .from("diesel_logs")
+    .select("current_balance")
+    .eq("generator_id", generatorId)
+    .neq("status", "Rejected")
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.current_balance ?? 0;
+}
+
+function detectAnomalies(computed: ReturnType<typeof sdcsCompute>, benchmarkLph: number, tankCapacity: number, historicalAvg: number, maxDailyUsage: number): { flags: string[]; alerts: { type: string; severity: string; message: string }[] } {
   const flags: string[] = [];
-  if (lph > expectedLph * 1.2) flags.push("HIGH_CONSUMPTION");
-  if (currentBalance < tankCapacity * 0.2) flags.push("LOW_FUEL");
-  if (dieselUsed > maxDailyUsage * 1.5) flags.push("THEFT_SUSPECTED");
-  return flags;
+  const alerts: { type: string; severity: string; message: string }[] = [];
+
+  // 1. HIGH_CONSUMPTION: calculated_lph > benchmark_lph * 1.2
+  if (computed.calculatedLph > benchmarkLph * 1.2) {
+    flags.push("HIGH_CONSUMPTION");
+    alerts.push({ type: "HIGH_CONSUMPTION", severity: "warning", message: `High consumption: ${computed.calculatedLph.toFixed(1)} L/h vs benchmark ${benchmarkLph.toFixed(1)} L/h` });
+  }
+
+  // 2. LOW_FUEL: current_balance < 20% tank capacity
+  if (computed.currentBalance < tankCapacity * 0.2 && computed.currentBalance >= 0) {
+    flags.push("LOW_FUEL");
+    alerts.push({ type: "LOW_FUEL", severity: "critical", message: `Low fuel: ${computed.currentBalance.toFixed(1)}L remaining (${(computed.currentBalance / tankCapacity * 100).toFixed(0)}% of ${tankCapacity}L tank)` });
+  }
+
+  // 3. SUSPICIOUS_USAGE: deviation from historical average
+  if (historicalAvg > 0) {
+    const deviation = Math.abs(computed.dieselUsed - historicalAvg) / historicalAvg;
+    if (deviation > 0.5) {
+      flags.push("SUSPICIOUS_USAGE");
+      alerts.push({ type: "SUSPICIOUS_USAGE", severity: "warning", message: `Unusual consumption: ${computed.dieselUsed.toFixed(1)}L vs 30-day avg ${historicalAvg.toFixed(1)}L (${(deviation * 100).toFixed(0)}% deviation)` });
+    }
+  }
+
+  // 4. THEFT_SUSPECTED: diesel_used far exceeds max daily usage
+  if (maxDailyUsage > 0 && computed.dieselUsed > maxDailyUsage * 1.5) {
+    flags.push("THEFT_SUSPECTED");
+    alerts.push({ type: "THEFT_SUSPECTED", severity: "critical", message: `Possible theft: ${computed.dieselUsed.toFixed(1)}L used exceeds max daily limit of ${maxDailyUsage.toFixed(1)}L` });
+  }
+
+  return { flags, alerts };
 }
 
-async function logAudit(logId: string, action: string, performedBy: string, fieldName: string, oldVal: string, newVal: string) {
+function pushAudit(auditTrail: any[], action: string, performedBy: string, description: string, changes?: Record<string, { old: any; new: any }>) {
+  auditTrail.push({
+    action,
+    performed_by: performedBy || "system",
+    description,
+    changes: changes || null,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function logAuditTrail(logId: string, action: string, performedBy: string, fieldName: string, oldVal: string, newVal: string) {
   await supabase.from("diesel_audit_trail").insert({
     diesel_log_id: logId,
     action,
@@ -60,12 +117,16 @@ async function createAlert(logId: string, alertType: string, severity: string, m
   });
 }
 
-/* ─── GET / — List logs ─── */
+/* ═══════════════════════════════════════════════════════════
+   ENDPOINTS
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── GET / — List diesel records ─── */
 router.get("/", async (req: Request, res: Response) => {
   const { generator_id, facility_id, status, start_date, end_date, limit } = req.query as Record<string, string>;
   let query = supabase
     .from("diesel_logs")
-    .select("*, generators(name, tank_capacity, expected_lph), sites(name)")
+    .select("*, generators(name, tank_capacity, expected_lph, benchmark_lph), sites(name)")
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -94,15 +155,31 @@ router.get("/stats", async (req: Request, res: Response) => {
   const { data: logs, error } = await base;
   if (error) { res.status(500).json({ error: error.message }); return; }
 
+  const genUsage: Record<string, { name: string; totalUsed: number; count: number }> = {};
+  logs?.forEach((l) => {
+    if (l.generators?.name) {
+      if (!genUsage[l.generator_id]) genUsage[l.generator_id] = { name: l.generators.name, totalUsed: 0, count: 0 };
+      genUsage[l.generator_id].totalUsed += l.diesel_used || 0;
+      genUsage[l.generator_id].count++;
+    }
+  });
+
+  const genEfficiency = Object.entries(genUsage)
+    .map(([id, g]) => ({ id, name: g.name, totalDiesel: Math.round(g.totalUsed * 100) / 100, avgPerLog: g.count > 0 ? Math.round((g.totalUsed / g.count) * 100) / 100 : 0 }))
+    .sort((a, b) => a.avgPerLog - b.avgPerLog);
+
+  const totalDieselUsed = logs?.reduce((s, l) => s + (l.diesel_used || 0), 0) || 0;
+  const totalSupplied = logs?.reduce((s, l) => s + (l.diesel_supplied || 0), 0) || 0;
+  const flaggedLogs = logs?.filter((l) => l.flags && l.flags.length > 0).length || 0;
+
   const stats = {
-    total_diesel_used: logs?.reduce((s, l) => s + (l.diesel_used || 0), 0) || 0,
-    total_run_hours: logs?.reduce((s, l) => s + (l.run_hours || 0), 0) || 0,
-    total_supplied: logs?.reduce((s, l) => s + (l.diesel_supplied || 0), 0) || 0,
+    total_diesel_used: totalDieselUsed,
+    total_supplied,
     total_logs: logs?.length || 0,
-    avg_lph: 0,
+    flagged_logs: flaggedLogs,
+    gen_efficiency: genEfficiency,
     alerts_count: 0,
   };
-  if (stats.total_run_hours > 0) stats.avg_lph = stats.total_diesel_used / stats.total_run_hours;
 
   const { count: alertCount } = await supabase
     .from("diesel_alerts")
@@ -114,21 +191,20 @@ router.get("/stats", async (req: Request, res: Response) => {
   res.json({ data: stats });
 });
 
-/* ─── GET /generators — List generators (auto-seeds if empty) ─── */
+/* ─── GET /generators — List generators ─── */
 router.get("/generators", async (req: Request, res: Response) => {
   let { data, error } = await supabase.from("generators").select("*, sites(name)").order("name");
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Auto-seed defaults if table is empty
   if (!data || data.length === 0) {
     const { data: sites } = await supabase.from("sites").select("id").limit(1);
     const facilityId = sites?.[0]?.id || null;
     const defaults = [
-      { name: "Generator 1 (Main)", facility_id: facilityId, tank_capacity: 1000, expected_lph: 25, max_daily_usage: 600 },
-      { name: "Generator 2 (Standby)", facility_id: facilityId, tank_capacity: 500, expected_lph: 20, max_daily_usage: 480 },
-      { name: "Generator 3 (Workshop)", facility_id: facilityId, tank_capacity: 300, expected_lph: 15, max_daily_usage: 360 },
-      { name: "Generator 4 (Admin Block)", facility_id: facilityId, tank_capacity: 200, expected_lph: 12, max_daily_usage: 288 },
-      { name: "Generator 5 (Quarters)", facility_id: facilityId, tank_capacity: 750, expected_lph: 22, max_daily_usage: 528 },
+      { name: "Generator 1 (Main)", facility_id: facilityId, tank_capacity: 1000, expected_lph: 25, benchmark_lph: 25, max_daily_usage: 600 },
+      { name: "Generator 2 (Standby)", facility_id: facilityId, tank_capacity: 500, expected_lph: 20, benchmark_lph: 20, max_daily_usage: 480 },
+      { name: "Generator 3 (Workshop)", facility_id: facilityId, tank_capacity: 300, expected_lph: 15, benchmark_lph: 15, max_daily_usage: 360 },
+      { name: "Generator 4 (Admin Block)", facility_id: facilityId, tank_capacity: 200, expected_lph: 12, benchmark_lph: 12, max_daily_usage: 288 },
+      { name: "Generator 5 (Quarters)", facility_id: facilityId, tank_capacity: 750, expected_lph: 22, benchmark_lph: 22, max_daily_usage: 528 },
     ];
     const { data: seeded, error: seedErr } = await supabase.from("generators").insert(defaults).select();
     if (!seedErr && seeded) data = seeded;
@@ -139,9 +215,22 @@ router.get("/generators", async (req: Request, res: Response) => {
 
 /* ─── POST /generators — Create generator ─── */
 router.post("/generators", async (req: Request, res: Response) => {
-  const { data, error } = await supabase.from("generators").insert(req.body).select().single();
+  const body = { ...req.body };
+  if (body.benchmark_lph !== undefined && !body.expected_lph) body.expected_lph = body.benchmark_lph;
+  if (body.expected_lph !== undefined && body.benchmark_lph === undefined) body.benchmark_lph = body.expected_lph;
+  const { data, error } = await supabase.from("generators").insert(body).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
   res.status(201).json({ data });
+});
+
+/* ─── PATCH /generators/:id ─── */
+router.patch("/generators/:id", async (req: Request, res: Response) => {
+  const body = { ...req.body };
+  if (body.benchmark_lph !== undefined && !body.expected_lph) body.expected_lph = body.benchmark_lph;
+  if (body.expected_lph !== undefined && body.benchmark_lph === undefined) body.benchmark_lph = body.expected_lph;
+  const { data, error } = await supabase.from("generators").update(body).eq("id", req.params.id).select().single();
+  if (error) { res.status(400).json({ error: error.message }); return; }
+  res.json({ data });
 });
 
 /* ─── GET /alerts — List unresolved alerts ─── */
@@ -152,13 +241,6 @@ router.get("/alerts", async (req: Request, res: Response) => {
     .eq("is_resolved", false)
     .order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ data });
-});
-
-/* ─── PATCH /generators/:id ─── */
-router.patch("/generators/:id", async (req: Request, res: Response) => {
-  const { data, error } = await supabase.from("generators").update(req.body).eq("id", req.params.id).select().single();
-  if (error) { res.status(400).json({ error: error.message }); return; }
   res.json({ data });
 });
 
@@ -174,34 +256,86 @@ router.patch("/alerts/:id/resolve", async (req: Request, res: Response) => {
   res.json({ data });
 });
 
+/* ─── GET /inactive-detection — MISSING_DATA check ─── */
+router.get("/inactive-detection", async (req: Request, res: Response) => {
+  const { data: gens } = await supabase.from("generators").select("id, name").eq("is_active", true);
+  if (!gens) { res.json({ data: [] }); return; }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dateStr = yesterday.toISOString().split("T")[0];
+
+  const missing: { generator_id: string; generator_name: string; date: string }[] = [];
+  for (const gen of gens) {
+    const { data: existing } = await supabase
+      .from("diesel_logs")
+      .select("id")
+      .eq("generator_id", gen.id)
+      .eq("date", dateStr)
+      .maybeSingle();
+    if (!existing) {
+      missing.push({ generator_id: gen.id, generator_name: gen.name, date: dateStr });
+    }
+  }
+
+  // Create alerts for missing generators
+  for (const m of missing) {
+    const { data: alertExists } = await supabase
+      .from("diesel_alerts")
+      .select("id")
+      .eq("alert_type", "MISSING_DATA")
+      .eq("message", `No diesel log for ${m.generator_name} on ${m.date}`)
+      .eq("is_resolved", false)
+      .maybeSingle();
+    if (!alertExists) {
+      await supabase.from("diesel_alerts").insert({
+        alert_type: "MISSING_DATA",
+        severity: "warning",
+        message: `No diesel log for ${m.generator_name} on ${m.date}`,
+        is_resolved: false,
+      });
+    }
+  }
+
+  res.json({ data: missing });
+});
+
 /* ─── GET /:id ─── */
 router.get("/:id", async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from("diesel_logs")
-    .select("*, generators(name, tank_capacity, expected_lph), sites(name)")
+    .select("*, generators(name, tank_capacity, expected_lph, benchmark_lph), sites(name)")
     .eq("id", req.params.id)
     .single();
   if (error) { res.status(404).json({ error: "Log not found" }); return; }
   res.json({ data });
 });
 
-/* ─── POST / — Create log ─── */
+/* ─── POST / — Create diesel record (SDCS) ─── */
 router.post("/", async (req: Request, res: Response) => {
   const b = req.body;
 
-  // Validate required
-  if (!b.date || !b.generator_id || !b.time_on || !b.time_off || b.idr === undefined || b.fdr === undefined) {
-    res.status(400).json({ error: "Missing required fields: date, generator_id, time_on, time_off, idr, fdr" });
+  // Validate required (only idr and fdr are truly required)
+  if (!b.date || !b.generator_id || b.idr === undefined || b.fdr === undefined) {
+    res.status(400).json({ error: "Missing required fields: date, generator_id, idr, fdr" });
     return;
   }
 
   // Validate IDR >= FDR
-  if (b.idr < b.fdr) {
+  const idr = Number(b.idr);
+  const fdr = Number(b.fdr);
+  if (idr < fdr) {
     res.status(400).json({ error: "IDR must be greater than or equal to FDR" });
     return;
   }
 
-  // Check duplicate
+  // No negative values
+  if (idr < 0 || fdr < 0) {
+    res.status(400).json({ error: "Negative readings are not allowed" });
+    return;
+  }
+
+  // Prevent duplicate entries per generator per day
   const { data: existing } = await supabase
     .from("diesel_logs")
     .select("id")
@@ -216,62 +350,76 @@ router.post("/", async (req: Request, res: Response) => {
 
   // Fetch generator config
   const { data: gen } = await supabase.from("generators").select("*").eq("id", b.generator_id).single();
+  if (!gen) {
+    res.status(404).json({ error: "Generator not found" });
+    return;
+  }
+
+  const benchmarkLph = gen.benchmark_lph || gen.expected_lph || 0;
+  const tankCapacity = gen.tank_capacity || 1000;
+  const maxDailyUsage = gen.max_daily_usage || 500;
 
   // Get previous balance
-  const { data: prevLog } = await supabase
-    .from("diesel_logs")
-    .select("current_balance")
-    .eq("generator_id", b.generator_id)
-    .neq("status", "Rejected")
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const prevBal = await getLatestBalance(b.generator_id);
 
-  const prevBal = prevLog?.current_balance ?? 0;
-  const expectedLph = gen?.expected_lph ?? 0;
-  const tankCapacity = gen?.tank_capacity ?? 1000;
-  const maxDailyUsage = gen?.max_daily_usage ?? 500;
+  // SDCS calculations
+  const computed = sdcsCompute(b, prevBal, benchmarkLph, tankCapacity);
 
-  const computed = computeFields(b, prevBal, expectedLph);
-  const flags = evaluateFlags(computed.lph, expectedLph, computed.currentBalance, tankCapacity, b.diesel_used ?? computed.dieselUsed, maxDailyUsage);
+  // Historical average for anomaly detection
+  const historicalAvg = await getHistoricalAvgDieselUsed(b.generator_id, b.date);
+
+  // Anomaly detection
+  const { flags, alerts: alertList } = detectAnomalies(computed, benchmarkLph, tankCapacity, historicalAvg, maxDailyUsage);
+
+  // Build audit trail
+  const auditTrail: any[] = [];
+  pushAudit(auditTrail, "CREATE", b.created_by || "", "Diesel record created", {
+    idr: { old: null, new: idr },
+    fdr: { old: null, new: fdr },
+    diesel_supplied: { old: null, new: b.diesel_supplied ?? 0 },
+  });
 
   const payload = {
     date: b.date,
-    facility_id: b.facility_id || gen?.facility_id || null,
+    facility_id: b.facility_id || gen.facility_id || null,
     generator_id: b.generator_id,
     operator_name: b.operator_name || b.operatorName || "",
-    time_on: b.time_on || b.timeOn,
-    time_off: b.time_off || b.timeOff,
-    run_hours: computed.runHours,
-    idr: b.idr,
-    fdr: b.fdr,
+    idr,
+    fdr,
     diesel_used: computed.dieselUsed,
     diesel_supplied: b.diesel_supplied ?? b.dieselSupplied ?? 0,
     supplier_name: b.supplier_name || b.supplierName || "",
     delivery_reference: b.delivery_reference || b.deliveryReference || "",
     previous_balance: computed.previousBalance,
     current_balance: computed.currentBalance,
-    lph: computed.lph,
-    expected_lph: computed.expectedLph,
+    estimated_run_hours: computed.estimatedRunHours,
+    lph: computed.calculatedLph,
+    expected_lph: benchmarkLph,
     variance: computed.variance,
     flags,
     status: "Submitted",
     remarks: b.remarks || "",
-    created_by: b.created_by || b.createdBy || "",
+    created_by: b.created_by || "",
+    audit_trail: JSON.stringify(auditTrail),
   };
 
   const { data, error } = await supabase.from("diesel_logs").insert(payload).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
 
   // Create alerts
-  for (const flag of flags) {
-    const severity = flag === "THEFT_SUSPECTED" ? "critical" : flag === "LOW_FUEL" ? "warning" : "warning";
-    await createAlert(data.id, flag, severity, `${flag.replace(/_/g, " ")} on ${b.date} for generator ${gen?.name || b.generator_id}`);
+  for (const al of alertList) {
+    await createAlert(data.id, al.type, al.severity, al.message);
   }
 
-  // Audit
-  await logAudit(data.id, "CREATE", payload.created_by, "all", "", JSON.stringify(payload));
+  // Audit log entry
+  await supabase.from("diesel_audit_trail").insert({
+    diesel_log_id: data.id,
+    action: "CREATE",
+    performed_by: payload.created_by || "system",
+    field_name: "record",
+    old_value: "",
+    new_value: JSON.stringify(payload),
+  });
 
   res.status(201).json({ data });
 });
@@ -295,39 +443,60 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  const gen = await supabase.from("generators").select("*").eq("id", existing.generator_id).single().then(r => r.data);
-  const prevBal = existing.previous_balance;
-  const expectedLph = gen?.expected_lph ?? existing.expected_lph;
-
-  const merged = { ...existing, ...b };
-  const computed = computeFields(merged, prevBal, expectedLph);
+  const { data: gen } = await supabase.from("generators").select("*").eq("id", existing.generator_id).single();
+  const benchmarkLph = gen?.benchmark_lph || gen?.expected_lph || existing.expected_lph || 0;
   const tankCapacity = gen?.tank_capacity ?? 1000;
   const maxDailyUsage = gen?.max_daily_usage ?? 500;
-  const flags = evaluateFlags(computed.lph, expectedLph, computed.currentBalance, tankCapacity, computed.dieselUsed, maxDailyUsage);
 
+  const merged = { ...existing, ...b };
+  const computed = sdcsCompute(merged, existing.previous_balance, benchmarkLph, tankCapacity);
+
+  // Re-detect anomalies
+  const historicalAvg = await getHistoricalAvgDieselUsed(existing.generator_id, existing.date);
+  const { flags, alerts: alertList } = detectAnomalies(computed, benchmarkLph, tankCapacity, historicalAvg, maxDailyUsage);
+
+  // Track changes for audit
+  const changes: Record<string, { old: any; new: any }> = {};
+  const trackFields = ["idr", "fdr", "diesel_supplied", "supplier_name", "remarks"];
   const payload: any = {};
-  const trackFields = ["date", "time_on", "time_off", "idr", "fdr", "diesel_supplied", "supplier_name", "remarks"];
+
+  // Initialize audit trail from existing or empty array
+  let auditTrail: any[] = [];
+  try { auditTrail = typeof existing.audit_trail === "string" ? JSON.parse(existing.audit_trail) : existing.audit_trail || []; }
+  catch { auditTrail = []; }
+
   for (const f of trackFields) {
     if (b[f] !== undefined) {
       payload[f] = b[f];
       if (existing[f] !== undefined && String(b[f]) !== String(existing[f])) {
-        await logAudit(existing.id, "UPDATE", b.updated_by || "", f, String(existing[f]), String(b[f]));
+        changes[f] = { old: existing[f], new: b[f] };
+        await logAuditTrail(existing.id, "UPDATE", b.updated_by || "", f, String(existing[f]), String(b[f]));
       }
     }
   }
 
-  payload.run_hours = computed.runHours;
   payload.diesel_used = computed.dieselUsed;
   payload.current_balance = computed.currentBalance;
-  payload.lph = computed.lph;
+  payload.estimated_run_hours = computed.estimatedRunHours;
+  payload.lph = computed.calculatedLph;
   payload.variance = computed.variance;
   payload.flags = flags;
 
-  // Reactivate status if editing
+  if (Object.keys(changes).length > 0) {
+    pushAudit(auditTrail, "UPDATE", b.updated_by || "", "Record updated", changes);
+    payload.audit_trail = JSON.stringify(auditTrail);
+  }
+
+  // Reactivate status if editing draft
   if (existing.status === "Draft") payload.status = "Submitted";
 
   const { data, error } = await supabase.from("diesel_logs").update(payload).eq("id", req.params.id).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
+
+  // Create alerts for new anomalies
+  for (const al of alertList) {
+    await createAlert(data.id, al.type, al.severity, al.message);
+  }
 
   res.json({ data });
 });
@@ -341,15 +510,24 @@ router.patch("/:id/approve", async (req: Request, res: Response) => {
     return;
   }
 
-  const payload = {
+  const approvedBy = req.body.approved_by || "";
+  const payload: any = {
     status: "Approved",
-    approved_by: req.body.approved_by || "",
+    approved_by: approvedBy,
     approved_at: new Date().toISOString(),
   };
+
+  // Update audit trail
+  let auditTrail: any[] = [];
+  try { auditTrail = typeof existing.audit_trail === "string" ? JSON.parse(existing.audit_trail) : existing.audit_trail || []; }
+  catch { auditTrail = []; }
+  pushAudit(auditTrail, "APPROVE", approvedBy, "Record approved by supervisor");
+  payload.audit_trail = JSON.stringify(auditTrail);
+
   const { data, error } = await supabase.from("diesel_logs").update(payload).eq("id", req.params.id).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
-  await logAudit(data.id, "APPROVE", payload.approved_by, "status", "Submitted", "Approved");
 
+  await logAuditTrail(data.id, "APPROVE", approvedBy, "status", "Submitted", "Approved");
   res.json({ data });
 });
 
@@ -362,14 +540,22 @@ router.patch("/:id/reject", async (req: Request, res: Response) => {
     return;
   }
 
-  const payload = {
+  const rejectedBy = req.body.approved_by || "";
+  const payload: any = {
     status: "Rejected",
     rejection_reason: req.body.rejection_reason || req.body.rejectionReason || "",
   };
+
+  let auditTrail: any[] = [];
+  try { auditTrail = typeof existing.audit_trail === "string" ? JSON.parse(existing.audit_trail) : existing.audit_trail || []; }
+  catch { auditTrail = []; }
+  pushAudit(auditTrail, "REJECT", rejectedBy, "Record rejected", { rejection_reason: { old: "", new: payload.rejection_reason } });
+  payload.audit_trail = JSON.stringify(auditTrail);
+
   const { data, error } = await supabase.from("diesel_logs").update(payload).eq("id", req.params.id).select().single();
   if (error) { res.status(400).json({ error: error.message }); return; }
-  await logAudit(data.id, "REJECT", req.body.approved_by || "", "status", "Submitted", "Rejected");
 
+  await logAuditTrail(data.id, "REJECT", rejectedBy, "status", "Submitted", "Rejected");
   res.json({ data });
 });
 
@@ -386,7 +572,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
   res.json({ message: "Deleted" });
 });
 
-/* ─── GET /:id/audit — Audit trail for a log ─── */
+/* ─── GET /:id/audit — Audit trail ─── */
 router.get("/:id/audit", async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from("diesel_audit_trail")
@@ -394,7 +580,12 @@ router.get("/:id/audit", async (req: Request, res: Response) => {
     .eq("diesel_log_id", req.params.id)
     .order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ data });
+
+  // Also fetch embedded audit_trail if available
+  const { data: log } = await supabase.from("diesel_logs").select("audit_trail").eq("id", req.params.id).single();
+  const embeddedTrail = log?.audit_trail || [];
+
+  res.json({ data: { table_audit: data || [], embedded_audit: embeddedTrail } });
 });
 
 export default router;

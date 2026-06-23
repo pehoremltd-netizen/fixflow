@@ -215,12 +215,21 @@ export interface Generator {
   facility_id: string;
   tank_capacity: number;
   expected_lph: number;
+  benchmark_lph: number;
   max_daily_usage: number;
   is_active: boolean;
   sites?: { name: string };
 }
 
 export type DieselLogStatus = "Draft" | "Submitted" | "Approved" | "Rejected";
+
+export interface AuditEntry {
+  action: string;
+  performed_by: string;
+  description: string;
+  changes?: Record<string, { old: any; new: any }> | null;
+  timestamp: string;
+}
 
 export interface DieselLog {
   id: string;
@@ -239,8 +248,10 @@ export interface DieselLog {
   delivery_reference: string;
   previous_balance: number;
   current_balance: number;
+  estimated_run_hours: number;
   lph: number;
   expected_lph: number;
+  benchmark_lph: number;
   variance: number;
   flags: string[];
   status: DieselLogStatus;
@@ -251,6 +262,7 @@ export interface DieselLog {
   created_by: string;
   created_at: string;
   updated_at: string;
+  audit_trail: AuditEntry[] | string;
   generators?: Generator;
   sites?: { name: string };
 }
