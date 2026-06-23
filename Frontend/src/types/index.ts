@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "manager" | "supervisor" | "staff" | "stakeholder" | "tenant";
+export type UserRole = "admin" | "manager" | "supervisor" | "staff" | "upline_manager" | "tenant";
 
 export interface Organization {
   id: string;
@@ -35,7 +35,6 @@ export interface Site {
   country: string;
   latitude: number;
   longitude: number;
-  attendance_radius: number;
   qr_code?: string;
   is_active: boolean;
   created_at: string;
@@ -167,6 +166,119 @@ export interface MaintenanceRequest {
   updated_at: string;
 }
 
+export type UplineManagerLinkStatus = "active" | "revoked";
+
+export interface UplineManagerLink {
+  id: string;
+  token: string;
+  viewerName: string;
+  viewerEmail: string;
+  createdAt: string;
+  lastAccessedAt: string | null;
+  status: UplineManagerLinkStatus;
+}
+
+export type FeedbackStatus = "New" | "Read" | "Actioned";
+
+export interface ViewerFeedback {
+  id: string;
+  viewerName: string;
+  viewerEmail: string;
+  uplineManagerLinkId?: string;
+  pageContext: string;
+  pageLabel: string;
+  commentText: string;
+  createdAt: string;
+  status: FeedbackStatus;
+  ajoseResponse: string;
+}
+
+export type CommentAuthorType = "ajose" | "upline_manager";
+
+export interface UplineManagerComment {
+  id: string;
+  uplineManagerLinkId: string;
+  itemType: string;
+  itemId: string;
+  authorType: CommentAuthorType;
+  authorName: string;
+  commentText: string;
+  createdAt: string;
+  parentCommentId: string | null;
+  status: FeedbackStatus;
+  orderKey: string;
+}
+
+export interface Generator {
+  id: string;
+  name: string;
+  facility_id: string;
+  tank_capacity: number;
+  expected_lph: number;
+  max_daily_usage: number;
+  is_active: boolean;
+  sites?: { name: string };
+}
+
+export type DieselLogStatus = "Draft" | "Submitted" | "Approved" | "Rejected";
+
+export interface DieselLog {
+  id: string;
+  date: string;
+  facility_id: string;
+  generator_id: string;
+  operator_name: string;
+  time_on: string;
+  time_off: string;
+  run_hours: number;
+  idr: number;
+  fdr: number;
+  diesel_used: number;
+  diesel_supplied: number;
+  supplier_name: string;
+  delivery_reference: string;
+  previous_balance: number;
+  current_balance: number;
+  lph: number;
+  expected_lph: number;
+  variance: number;
+  flags: string[];
+  status: DieselLogStatus;
+  rejection_reason: string;
+  remarks: string;
+  approved_by: string;
+  approved_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  generators?: Generator;
+  sites?: { name: string };
+}
+
+export interface DieselAlert {
+  id: string;
+  diesel_log_id: string;
+  alert_type: string;
+  severity: string;
+  message: string;
+  is_resolved: boolean;
+  resolved_at: string | null;
+  created_at: string;
+  diesel_logs?: { date: string; generator_id: string; operator_name: string };
+}
+
+export interface Artisan {
+  id: string;
+  name: string;
+  trade: string;
+  phone: string;
+  email: string;
+  site: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DashboardStats {
   totalWorkOrders: number;
   openWorkOrders: number;
@@ -174,6 +286,5 @@ export interface DashboardStats {
   pendingInspections: number;
   totalAssets: number;
   activeStaff: number;
-  attendanceRate: number;
   overdueTasks: number;
 }

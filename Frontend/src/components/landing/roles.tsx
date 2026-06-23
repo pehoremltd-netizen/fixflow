@@ -34,12 +34,12 @@ const roles = [
   {
     icon: HardHat,
     title: "Staff Portal",
-    description: "Inspections, QR attendance, work orders, and daily task management.",
+    description: "Inspections, work orders, and daily task management.",
     href: "/",
   },
   {
     icon: Eye,
-    title: "Stakeholder Portal",
+    title: "Upline Manager Portal",
     description: "Read-only access to reports, KPIs, facility performance, and project progress.",
     href: "/",
   },
@@ -66,7 +66,7 @@ export function Roles() {
             Six Dedicated <span className="gradient-text">Portals</span>
           </h2>
           <p className="text-lg text-text-secondary max-w-2xl mx-auto">
-            Role-specific interfaces designed for every stakeholder in your
+            Role-specific interfaces designed for every role in your
             facility management ecosystem.
           </p>
         </motion.div>

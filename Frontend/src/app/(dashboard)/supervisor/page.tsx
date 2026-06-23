@@ -32,7 +32,6 @@ export default function SupervisorDashboard() {
                 { label: "Assign Tasks", href: "/supervisor/tasks", icon: ClipboardCheck },
                 { label: "Team Roster", href: "/supervisor/team", icon: Users },
                 { label: "Inspections", href: "/supervisor/inspections", icon: ClipboardCheck },
-                { label: "Attendance", href: "/supervisor/attendance", icon: Clock },
               ].map((action) => {
                 const Icon = action.icon;
                 return (

@@ -9,7 +9,6 @@ export interface DashboardStats {
   pendingInspections: number;
   totalAssets: number;
   activeStaff: number;
-  attendanceRate: number;
   overdueTasks: number;
 }
 

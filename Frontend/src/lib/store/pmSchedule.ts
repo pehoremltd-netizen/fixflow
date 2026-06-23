@@ -45,16 +45,24 @@ function recalcStatus(task: PMTask): PMTask {
 
 const mockTasks: PMTask[] = [];
 
+let cache: PMTask[] | undefined;
+
 function loadTasks(): PMTask[] {
+  if (cache !== undefined) return cache;
   if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored).map((t: PMTask) => recalcStatus(t));
+    if (stored) {
+      const parsed: PMTask[] = JSON.parse(stored).map((t: PMTask) => recalcStatus(t));
+      cache = parsed;
+      return parsed;
+    }
   } catch {}
   return [];
 }
 
 function saveTasks(tasks: PMTask[]): void {
+  cache = tasks;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
 }
 

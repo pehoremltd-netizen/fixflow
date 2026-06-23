@@ -22,6 +22,9 @@ import qrCodeRoutes from "./routes/qr-codes";
 import faultReportRoutes from "./routes/fault-reports";
 import pmScheduleRoutes from "./routes/pm-schedule";
 import contractorRoutes from "./routes/contractors";
+import uplineManagerRoutes from "./routes/upline-manager";
+import artisanRoutes from "./routes/artisans";
+import dieselManagementRoutes from "./routes/diesel-management";
 
 const app = express();
 
@@ -55,6 +58,9 @@ app.use("/api/qr-codes", qrCodeRoutes);
 app.use("/api/fault-reports", faultReportRoutes);
 app.use("/api/pm-schedule", pmScheduleRoutes);
 app.use("/api/contractors", contractorRoutes);
+app.use("/api/upline-manager", uplineManagerRoutes);
+app.use("/api/artisans", artisanRoutes);
+app.use("/api/diesel-management", dieselManagementRoutes);
 
 app.get("/", (_req, res) => {
   res.json({

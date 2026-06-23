@@ -33,6 +33,7 @@ import {
   DollarSign,
   Calculator,
   Maximize,
+  Fuel,
 } from "lucide-react";
 import Image from "next/image";
 import { useState, memo } from "react";
@@ -57,15 +58,15 @@ const roleNavItems: Record<UserRole, { label: string; items: NavItem[] }[]> = {
     {
       label: "Operations",
       items: [
-        { label: "Attendance", href: "/admin/attendance", icon: Clock },
         { label: "Sites & Facilities", href: "/admin/sites", icon: Building2 },
-        { label: "Operations Console", href: "/admin/facility-operations", icon: Maximize },
-        { label: "Facility Reports", href: "/admin/facility-reports", icon: FileText },
-        { label: "Pending Tasks", href: "/admin/facility-reports/pending-tasks", icon: ClipboardList },
+        { label: "Pending Tasks", href: "/admin/pending-tasks", icon: ClipboardList },
+
         { label: "Inspections", href: "/admin/inspections", icon: ClipboardCheck },
+        { label: "Facility Activities", href: "/admin/facility-activities", icon: ClipboardList },
         { label: "Work Orders", href: "/admin/work-orders", icon: Wrench },
         { label: "PM Schedule", href: "/admin/pm-schedule", icon: CalendarClock },
         { label: "Fault Reports", href: "/admin/fault-reports", icon: AlertTriangle },
+        { label: "Diesel Management", href: "/admin/diesel-management", icon: Fuel },
       ],
     },
     {
@@ -74,18 +75,22 @@ const roleNavItems: Record<UserRole, { label: string; items: NavItem[] }[]> = {
         { label: "Utilities", href: "/admin/utilities", icon: Zap },
         { label: "Budget", href: "/admin/budget", icon: DollarSign },
         { label: "Inventory", href: "/admin/inventory", icon: ClipboardList },
+        { label: "Artisan Record", href: "/admin/artisans", icon: Users },
         { label: "FM Calculator", href: "/admin/fm-calculator", icon: Calculator },
       ],
     },
     {
       label: "Analytics",
       items: [
+        { label: "Weekly Reports", href: "/admin/weekly-reports", icon: FileBarChart },
         { label: "Reports", href: "/admin/reports", icon: FileBarChart },
       ],
     },
     {
       label: "System",
       items: [
+        { label: "Upline Manager Access", href: "/admin/upline-manager-access", icon: Users },
+        { label: "Upline Manager Comments", href: "/admin/feedback", icon: MessageSquare },
         { label: "Settings", href: "/admin/settings", icon: Settings },
       ],
     },
@@ -124,7 +129,6 @@ const roleNavItems: Record<UserRole, { label: string; items: NavItem[] }[]> = {
       label: "Operations",
       items: [
         { label: "Inspections", href: "/supervisor/inspections", icon: ClipboardList },
-        { label: "Attendance", href: "/supervisor/attendance", icon: Clock },
         { label: "Team", href: "/supervisor/team", icon: Users },
         { label: "Tasks", href: "/supervisor/tasks", icon: ClipboardCheck },
       ],
@@ -141,36 +145,16 @@ const roleNavItems: Record<UserRole, { label: string; items: NavItem[] }[]> = {
       label: "Operations",
       items: [
         { label: "Inspections", href: "/staff/inspections", icon: ClipboardCheck },
-        { label: "Attendance", href: "/staff/attendance", icon: Clock },
         { label: "Work Orders", href: "/staff/work-orders", icon: Wrench },
         { label: "History", href: "/staff/history", icon: FileSpreadsheet },
       ],
     },
   ],
-  stakeholder: [
+  upline_manager: [
     {
       label: "",
       items: [
-        { label: "Dashboard", href: "/stakeholder", icon: LayoutDashboard },
-      ],
-    },
-    {
-      label: "Operations",
-      items: [
-        { label: "Inspections", href: "/stakeholder/inspections", icon: ClipboardCheck },
-      ],
-    },
-    {
-      label: "Analytics",
-      items: [
-        { label: "Reports", href: "/stakeholder/reports", icon: FileBarChart },
-      ],
-    },
-    {
-      label: "Info",
-      items: [
-        { label: "KPI", href: "/stakeholder/kpi", icon: BarChart3 },
-        { label: "Documents", href: "/stakeholder/documents", icon: FileText },
+        { label: "Dashboard", href: "/upline-manager", icon: LayoutDashboard },
       ],
     },
   ],
@@ -252,7 +236,6 @@ export const Sidebar = memo(function Sidebar({ role, isMobileOpen, onMobileClose
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      prefetch={true}
                       onClick={handleNavClick}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
@@ -351,7 +334,6 @@ export const Sidebar = memo(function Sidebar({ role, isMobileOpen, onMobileClose
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        prefetch={true}
                         className={cn(
                           "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                           isActive

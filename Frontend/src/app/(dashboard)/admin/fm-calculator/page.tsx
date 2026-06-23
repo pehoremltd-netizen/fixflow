@@ -94,8 +94,8 @@ function GeneratorTab() {
   const [ratedPowerKva, setRatedPowerKva] = useState("");
   const [powerFactor, setPowerFactor] = useState("0.8");
   const [loadFactorPercent, setLoadFactorPercent] = useState("");
-  const [hoursPerDay, setHoursPerDay] = useState("");
-  const [daysPerWeek, setDaysPerWeek] = useState("");
+  const [hoursPerDay, setHoursPerDay] = useState("8");
+  const [daysPerWeek, setDaysPerWeek] = useState("5");
   const [errors, setErrors] = useState<string[]>([]);
   const [result, setResult] = useState<EngineResult<GeneratorOutput> | null>(null);
 
@@ -115,7 +115,7 @@ function GeneratorTab() {
 
   const handleReset = () => {
     setRatedPowerKva(""); setPowerFactor("0.8"); setLoadFactorPercent("");
-    setHoursPerDay(""); setDaysPerWeek("");
+    setHoursPerDay("8"); setDaysPerWeek("5");
     setErrors([]); setResult(null);
   };
 
@@ -154,8 +154,8 @@ function GeneratorTab() {
 function DieselTab() {
   const [generatorCapacityKva, setGeneratorCapacityKva] = useState("");
   const [loadFactorPercent, setLoadFactorPercent] = useState("");
-  const [hoursPerDay, setHoursPerDay] = useState("");
-  const [daysPerWeek, setDaysPerWeek] = useState("");
+  const [hoursPerDay, setHoursPerDay] = useState("8");
+  const [daysPerWeek, setDaysPerWeek] = useState("5");
   const [sfc, setSfc] = useState("0.25");
   const [fuelPrice, setFuelPrice] = useState("1200");
   const [errors, setErrors] = useState<string[]>([]);
@@ -177,7 +177,7 @@ function DieselTab() {
   };
 
   const handleReset = () => {
-    setGeneratorCapacityKva(""); setLoadFactorPercent(""); setHoursPerDay(""); setDaysPerWeek("");
+    setGeneratorCapacityKva(""); setLoadFactorPercent(""); setHoursPerDay("8"); setDaysPerWeek("5");
     setSfc("0.25"); setFuelPrice("1200");
     setErrors([]); setResult(null);
   };

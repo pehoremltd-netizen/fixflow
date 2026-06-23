@@ -460,7 +460,7 @@ export default function LandingPage() {
     setError("");
     try {
       const user = await login(email, password);
-      const rolePath: Record<string, string> = { admin: "admin", manager: "manager", supervisor: "supervisor", staff: "staff", stakeholder: "stakeholder", tenant: "tenant" };
+      const rolePath: Record<string, string> = { admin: "admin", manager: "manager", supervisor: "supervisor", staff: "staff", upline_manager: "upline-manager", tenant: "tenant" };
       router.push(rolePath[user.role] ? `/${rolePath[user.role]}` : "/");
     } catch (err: any) {
       setError(err.message || "Invalid email or password");

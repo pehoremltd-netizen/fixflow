@@ -117,7 +117,6 @@ export function computeDashboardStats(): any {
     pendingInspections: inspections.filter((i: any) => i.status === "draft" || i.status === "submitted").length,
     totalAssets: assets.length,
     activeStaff: profiles.filter((p: any) => p.is_active).length,
-    attendanceRate: 0,
     overdueTasks: wos.filter((w: any) => w.status !== "completed" && w.status !== "cancelled" && w.due_date && new Date(w.due_date) < new Date()).length,
   };
 }

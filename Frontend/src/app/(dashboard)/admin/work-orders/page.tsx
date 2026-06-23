@@ -17,7 +17,6 @@ import {
   getNextStatus, WorkOrder, WorkOrderStatus, WorkOrderPriority,
   WorkOrderCategory, CostCode, costCodeLabels, statusFlow,
 } from "@/lib/store/workOrders";
-import { getStaffList } from "@/lib/store/attendance";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   OPEN:        { label: "Open",        color: "var(--color-info)", bg: "#4A9EFF15" },
@@ -173,7 +172,7 @@ export default function WorkOrdersPage() {
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const staffList = getStaffList();
+  const staffList: { id: string; name: string }[] = [];
 
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
 

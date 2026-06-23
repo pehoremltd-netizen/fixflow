@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  Plus, Building2, MapPin, Navigation, Loader2,
+  Plus, Building2, MapPin, Loader2,
   Search, Globe, CheckCircle2, XCircle, Eye, Trash2,
   AlertTriangle, ToggleLeft, ToggleRight,
 } from "lucide-react";
@@ -27,7 +27,6 @@ interface Site {
   address: string;
   latitude: number;
   longitude: number;
-  attendance_radius: number;
   is_active: boolean;
   organization_id?: string;
   created_at?: string;
@@ -51,7 +50,7 @@ export default function SitesPage() {
   const [postalCode, setPostalCode] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [attendanceRadius, setAttendanceRadius] = useState("100");
+
   const [submitting, setSubmitting] = useState(false);
 
   // Detail modal
@@ -103,7 +102,7 @@ export default function SitesPage() {
 
   const resetForm = () => {
     setName(""); setAddress(""); setCity(""); setState(""); setPostalCode("");
-    setLatitude(""); setLongitude(""); setAttendanceRadius("100");
+    setLatitude(""); setLongitude("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,7 +116,6 @@ export default function SitesPage() {
         address: `${address.trim()}, ${city.trim()}, ${state.trim()} ${postalCode.trim()}`,
         latitude: parseFloat(latitude) || 0,
         longitude: parseFloat(longitude) || 0,
-        attendance_radius: parseFloat(attendanceRadius) || 100,
         is_active: true,
         organization_id: orgId,
       });
@@ -228,11 +226,6 @@ export default function SitesPage() {
                   </div>
                 </div>
                 <div className="space-y-2 mt-3">
-                  <Label className="flex items-center gap-1.5 text-secondary-foreground">
-                    <Navigation className="h-3.5 w-3.5 text-primary" />
-                    Geofence Radius (meters)
-                  </Label>
-                  <Input type="number" step="1" min="10" placeholder="100" value={attendanceRadius} onChange={(e) => setAttendanceRadius(e.target.value)} className="border-border bg-card-alt text-foreground" />
                 </div>
               </div>
               <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={submitting}>
@@ -317,10 +310,6 @@ export default function SitesPage() {
                     <Globe className="h-3.5 w-3.5 text-primary" />
                     <span className="truncate">{formatCoords(site.latitude, site.longitude)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Navigation className="h-3.5 w-3.5 text-primary" />
-                    <span>Radius: {site.attendance_radius ?? 100}m</span>
-                  </div>
                 </div>
               </div>
             </motion.div>
@@ -375,10 +364,6 @@ export default function SitesPage() {
                       <span className="text-muted-foreground text-xs">Longitude</span>
                       <p className="text-foreground text-sm mt-0.5">{detailSite.longitude.toFixed(4)}</p>
                     </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground text-xs">Geofence Radius</span>
-                    <p className="text-foreground text-sm mt-0.5">{detailSite.attendance_radius ?? 100} meters</p>
                   </div>
                 </div>
 

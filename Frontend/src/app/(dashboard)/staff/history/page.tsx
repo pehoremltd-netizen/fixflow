@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, ClipboardCheck, Wrench } from "lucide-react";
+import { ClipboardCheck, Wrench } from "lucide-react";
 
 
 
@@ -18,7 +18,6 @@ export default function HistoryPage() {
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="inspections">Inspections</TabsTrigger>
           <TabsTrigger value="work-orders">Work Orders</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all">

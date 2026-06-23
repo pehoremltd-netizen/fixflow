@@ -29,30 +29,12 @@ export default function StaffDashboard() {
               <CardTitle className="text-foreground">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Link href="/staff/attendance">
-                <Button variant="outline" className="w-full justify-start gap-3 h-12">
-                  <QrCode className="h-5 w-5 text-primary" />
-                  <div className="text-left">
-                    <p className="text-sm font-medium">Clock In/Out</p>
-                    <p className="text-xs text-muted-foreground">Scan QR code</p>
-                  </div>
-                </Button>
-              </Link>
               <Link href="/staff/inspections">
                 <Button variant="outline" className="w-full justify-start gap-3 h-12">
                   <ClipboardCheck className="h-5 w-5 text-primary" />
                   <div className="text-left">
                     <p className="text-sm font-medium">New Inspection</p>
                     <p className="text-xs text-muted-foreground">Start a new report</p>
-                  </div>
-                </Button>
-              </Link>
-              <Link href="/staff/attendance">
-                <Button variant="outline" className="w-full justify-start gap-3 h-12">
-                  <MapPin className="h-5 w-5 text-primary" />
-                  <div className="text-left">
-                    <p className="text-sm font-medium">GPS Status</p>
-                    <p className="text-xs text-success">Within work zone</p>
                   </div>
                 </Button>
               </Link>

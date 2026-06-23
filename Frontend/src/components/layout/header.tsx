@@ -131,8 +131,25 @@ export const Header = memo(function Header({ user, onMenuToggle }: HeaderProps) 
 
   const roleBadgeColor = getRoleColor(user.role);
 
+  const [uplineManagerViewer, setUplineManagerViewer] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("fixflow-upline-manager-session");
+      if (raw) {
+        const s = JSON.parse(raw);
+        setUplineManagerViewer(s.viewerName || null);
+      }
+    } catch {}
+  }, []);
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-header-bg/95 backdrop-blur supports-[backdrop-filter]:bg-header-bg/60 px-4 lg:px-6">
+    <>
+      {uplineManagerViewer && (
+        <div className="sticky top-0 z-30 bg-primary/10 border-b border-primary/20 px-4 py-1.5 text-center text-xs text-primary font-medium">
+          Viewing as {uplineManagerViewer} · Upline Manager
+        </div>
+      )}
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-header-bg/95 backdrop-blur supports-[backdrop-filter]:bg-header-bg/60 px-4 lg:px-6">
       <Button
         variant="ghost"
         size="icon"
@@ -268,6 +285,7 @@ export const Header = memo(function Header({ user, onMenuToggle }: HeaderProps) 
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
+    </>
   );
 });
 

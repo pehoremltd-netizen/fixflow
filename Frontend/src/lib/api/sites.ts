@@ -9,7 +9,6 @@ export interface Site {
   address: string;
   latitude: number;
   longitude: number;
-  attendance_radius: number;
   is_active: boolean;
 }
 

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
-
-const VALID_ROLES: UserRole[] = ["admin", "manager", "supervisor", "staff", "stakeholder", "tenant"];
+const VALID_ROLES: UserRole[] = ["admin", "manager", "supervisor", "staff", "upline_manager", "tenant"];
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -24,6 +23,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
   const portalRole = (pathname.split("/")[1] as UserRole);
   const sidebarRole = VALID_ROLES.includes(portalRole) ? portalRole : user.role;
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const toggleMobile = useCallback(() => setMobileSidebarOpen((v) => !v), []);
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -54,7 +54,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
         onMobileClose={() => setMobileSidebarOpen(false)}
       />
       <div className={cn("flex flex-1 flex-col transition-all duration-300", "lg:pl-64")}>
-        <Header user={user} onMenuToggle={() => setMobileSidebarOpen((v) => !v)} />
+        <Header user={user} onMenuToggle={toggleMobile} />
         <main className="flex-1 p-4 lg:p-6 animate-in max-w-7xl w-full mx-auto">
           {children}
         </main>

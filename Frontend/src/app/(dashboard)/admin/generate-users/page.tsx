@@ -16,7 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Check, Copy, Trash2, RefreshCw, UserPlus, Users, Eye, EyeOff, Key, Mail, Loader2 } from "lucide-react";
 
-const ROLES = ["admin", "manager", "supervisor", "staff", "stakeholder", "tenant"] as const;
+const ROLES = ["admin", "manager", "supervisor", "staff", "upline_manager", "tenant"] as const;
 
 interface GeneratedUser {
   password: string;
@@ -74,7 +74,7 @@ function getRoleColor(role: string): string {
     manager: "bg-info/10 text-blue-400",
     supervisor: "bg-warning/10 text-orange-400",
     staff: "bg-green-500/10 text-green-400",
-    stakeholder: "bg-teal-500/10 text-teal-400",
+    upline_manager: "bg-teal-500/10 text-teal-400",
     tenant: "bg-cyan-500/10 text-cyan-400",
   };
   return colors[role] || "bg-muted-foreground/10 text-gray-400";

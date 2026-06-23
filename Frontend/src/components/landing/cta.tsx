@@ -9,7 +9,6 @@ const benefits = [
   "Multi-tenant SaaS architecture",
   "Role-based access control",
   "Mobile-first responsive design",
-  "GPS geofencing attendance",
   "QR code integration",
   "Real-time analytics",
   "Dedicated subdomain workspace",

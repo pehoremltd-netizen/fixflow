@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SWRegister from "@/components/SWRegister";
+import MigrationRunner from "@/components/MigrationRunner";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { BRAND, getDocumentTitle } from "@/lib/brand";
 
@@ -50,6 +51,7 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background text-foreground">
         <ThemeProvider>
+          <MigrationRunner />
           {children}
           <SWRegister />
         </ThemeProvider>

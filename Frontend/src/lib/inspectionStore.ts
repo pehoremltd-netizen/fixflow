@@ -83,7 +83,7 @@ export function getCurrentUserRole(): UserRole {
     if (raw) {
       const b64 = raw.includes(".") ? raw.split(".")[1] : raw;
       const payload = JSON.parse(atob(b64));
-      const valid: UserRole[] = ["admin", "manager", "supervisor", "staff", "stakeholder", "tenant"];
+      const valid: UserRole[] = ["admin", "manager", "supervisor", "staff", "upline_manager", "tenant"];
       if (payload.role && valid.includes(payload.role)) return payload.role as UserRole;
     }
   } catch {}

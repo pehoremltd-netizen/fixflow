@@ -186,14 +186,12 @@ export default function ReportsPage() {
     { label: "On Leave", value: "0", icon: Clock, color: "text-primary" },
     { label: "Offline", value: "0", icon: AlertTriangle, color: "text-destructive" },
   ]);
-  const [staffPerfData, setStaffPerfData] = useState<{ dept: string; productivity: number; attendance: number }[]>([]);
+  const [staffPerfData, setStaffPerfData] = useState<{ dept: string; productivity: number }[]>([]);
 
   useEffect(() => {
     const orders = getWorkOrders();
     const pmTasks = getPMTasks();
     const faults = getMockFaultReports();
-    const attendance = loadFromStorage<AttRecord[]>("fixflow-attendance", []);
-    const qrAttendance = loadFromStorage<AttRecord[]>("fixflow-qr-attendance", []);
     const assets = loadFromStorage<AssetRecord[]>("fixflow-assets", []);
     const utilities = loadFromStorage<UtilityRecord[]>("fixflow-utilities", []);
     const maintSchedules = loadFromStorage<any[]>("fixflow-maintenance-schedules", []);
@@ -206,7 +204,7 @@ export default function ReportsPage() {
     setPmRate(pmTasks.length > 0 ? Math.round((pmTasks.filter((t) => t.status === "Completed").length / pmTasks.length) * 100) : 0);
     setOpenFaultsCount(faults.filter((f) => f.status !== "RESOLVED").length);
     setAssetUptime(assets.length > 0 ? Math.round(((assets.length - assets.filter((a) => a.condition === "Critical").length) / assets.length) * 100) : 0);
-    setStaffProd(attendance.length > 0 ? Math.round((attendance.filter((a) => a.status !== "absent").length / attendance.length) * 100) : 92);
+    setStaffProd(92);
     setBudgetUtil(orders.length > 0 ? Math.round(((totalCost > 0 ? completedCost / totalCost : 0)) * 100) : 62);
 
     const pmCompleted = pmTasks.filter((t) => t.status === "Completed").length;
@@ -345,19 +343,7 @@ export default function ReportsPage() {
       setAssetLifecycleData([]);
     }
 
-    const allAttendance = [...attendance, ...qrAttendance];
-    const staffSet = new Map<string, { present: number; late: number; absent: number; hours: number }>();
-    for (const a of allAttendance) {
-      const id = a.staffId || a.staffName;
-      if (!staffSet.has(id)) staffSet.set(id, { present: 0, late: 0, absent: 0, hours: 0 });
-      const entry = staffSet.get(id)!;
-      if (a.status === "present") entry.present++;
-      else if (a.status === "late") entry.late++;
-      else entry.absent++;
-      if (a.hoursWorked) entry.hours += a.hoursWorked;
-    }
-
-    const totalStaff = Math.max(staffSet.size, 8);
+    const totalStaff = 8;
     const online = Math.round(totalStaff * 0.75);
     const leave = Math.round(totalStaff * 0.17);
     const offline = totalStaff - online - leave;
@@ -370,21 +356,12 @@ export default function ReportsPage() {
     ]);
 
     const depts = ["HVAC", "Electrical", "Plumbing", "Fire Safety", "Structural"];
-    const staffArr = [...staffSet.entries()];
-    if (staffArr.length > 0) {
-      const assignedStaff = staffArr.slice(0, Math.min(staffArr.length, 5));
-      setStaffPerfData(
-        depts.map((dept, i) => {
-          const s = assignedStaff[i % assignedStaff.length];
-          const totalDays = s ? s[1].present + s[1].late + s[1].absent : 5;
-          const attPct = totalDays > 0 ? Math.round(((s ? s[1].present + s[1].late : 0) / totalDays) * 100) : 90;
-          const prodPct = Math.max(80, attPct - Math.round(Math.random() * 10 + 2));
-          return { dept, productivity: prodPct, attendance: attPct };
-        })
-      );
-    } else {
-      setStaffPerfData([]);
-    }
+    setStaffPerfData(
+      depts.map((dept) => ({
+        dept,
+        productivity: Math.round(80 + Math.random() * 18),
+      }))
+    );
 
     setLoading(false);
   }, []);
@@ -881,11 +858,6 @@ export default function ReportsPage() {
                       <Bar dataKey="productivity" radius={[4, 4, 0, 0]} name="Productivity %">
                         {staffPerfData.map((entry, index) => (
                           <Cell key={`p-${index}`} fill={DEPT_COLORS[index % DEPT_COLORS.length]} />
-                        ))}
-                      </Bar>
-                      <Bar dataKey="attendance" radius={[4, 4, 0, 0]} name="Attendance %">
-                        {staffPerfData.map((entry, index) => (
-                          <Cell key={`a-${index}`} fill={DEPT_COLORS[index % DEPT_COLORS.length]} />
                         ))}
                       </Bar>
                     </BarChart>

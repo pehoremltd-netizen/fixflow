@@ -38,16 +38,24 @@ export const costCodeLabels: Record<CostCode, string> = {
 
 const mockWorkOrders: WorkOrder[] = [];const STORAGE_KEY = "fixflow-work-orders";
 
+let cache: WorkOrder[] | undefined;
+
 function loadWorkOrders(): WorkOrder[] {
+  if (cache !== undefined) return cache;
   if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed: WorkOrder[] = JSON.parse(stored);
+      cache = parsed;
+      return parsed;
+    }
   } catch {}
   return [];
 }
 
 function saveWorkOrders(orders: WorkOrder[]): void {
+  cache = orders;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 }
 

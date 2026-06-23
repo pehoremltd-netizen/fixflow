@@ -16,19 +16,24 @@ export interface FaultReport {
 }
 
 const STORAGE_KEY = "fixflow-fault-reports";
-
-const mockReports: FaultReport[] = [];
+let cache: FaultReport[] | undefined;
 
 function loadReports(): FaultReport[] {
+  if (cache !== undefined) return cache;
   if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed: FaultReport[] = JSON.parse(stored);
+      cache = parsed;
+      return parsed;
+    }
   } catch {}
   return [];
 }
 
 function saveReports(reports: FaultReport[]): void {
+  cache = reports;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
 }
 
@@ -53,15 +58,29 @@ export function addFaultReport(data: Omit<FaultReport, "id" | "reportedAt" | "st
   return newReport;
 }
 
-export function updateStatus(id: string, newStatus: FaultStatus, notes?: string): FaultReport | null {
+export function updateStatus(id: string, status: FaultStatus, resolution?: string): FaultReport | null {
   const reports = loadReports();
-  const index = reports.findIndex(r => r.id === id);
+  const index = reports.findIndex((r) => r.id === id);
   if (index === -1) return null;
-  reports[index].status = newStatus;
-  if (newStatus === "RESOLVED" && notes) {
-    reports[index].resolution = notes;
+  reports[index].status = status;
+  if (status === "RESOLVED") {
     reports[index].resolvedAt = new Date().toISOString();
+    if (resolution) reports[index].resolution = resolution;
   }
   saveReports(reports);
   return reports[index];
+}
+
+export function updateFaultNotes(id: string, notes: string): void {
+  const reports = loadReports();
+  const r = reports.find((r) => r.id === id);
+  if (r) { r.fieldNotes = notes; saveReports(reports); }
+}
+
+export function deleteFaultReport(id: string): void {
+  saveReports(loadReports().filter((r) => r.id !== id));
+}
+
+export function deleteFaultReports(ids: string[]): void {
+  saveReports(loadReports().filter((r) => !ids.includes(r.id)));
 }

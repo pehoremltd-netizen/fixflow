@@ -37,8 +37,6 @@ function isThisWeek(iso: string) {
 export default function AdminDashboard() {
   const [openWOCount, setOpenWOCount] = useState(0);
   const [pmDueCount, setPMDueCount] = useState(0);
-  const [attendancePresent, setAttendancePresent] = useState(0);
-  const [attendanceTotal, setAttendanceTotal] = useState(0);
   const [dieselLevel, setDieselLevel] = useState<number | null>(null);
   const [powerStatus, setPowerStatus] = useState<string>("");
   const [budgetPct, setBudgetPct] = useState(0);
@@ -50,12 +48,6 @@ export default function AdminDashboard() {
 
     const pm = getPMTasks();
     setPMDueCount(pm.filter((t: any) => isThisWeek(t.dueDate)).length);
-
-    const att = loadFromStorage<any[]>("fixflow-attendance", []);
-    const today = new Date().toISOString().split("T")[0];
-    const todayAtt = att.filter((a: any) => a.date === today || (a.date && a.date.startsWith(today)));
-    setAttendanceTotal(todayAtt.length);
-    setAttendancePresent(todayAtt.filter((a: any) => a.status === "present").length);
 
     const utility = loadFromStorage<any>("fixflow-utility-data", null);
     if (utility) {
@@ -89,13 +81,6 @@ export default function AdminDashboard() {
       icon: CalendarClock,
       color: "var(--color-primary)",
       link: "/admin/pm-schedule",
-    },
-    {
-      title: "Attendance Today",
-      value: `${attendancePresent} / ${attendanceTotal}`,
-      icon: Clock,
-      color: "var(--color-success)",
-      link: "/admin/attendance",
     },
     {
       title: "Utility Alert",

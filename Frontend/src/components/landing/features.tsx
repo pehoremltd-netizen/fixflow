@@ -60,7 +60,7 @@ const features = [
   {
     icon: Users,
     title: "Role-Based Portals",
-    description: "Dedicated portals for Admin, Manager, Supervisor, Staff, Stakeholders, and Tenants.",
+    description: "Dedicated portals for Admin, Manager, Supervisor, Staff, Upline Managers, and Tenants.",
   },
   {
     icon: Shield,

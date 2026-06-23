@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { getMe } from "@/lib/api/auth";
+import { getLinkByToken, updateLastAccessed } from "@/lib/store/uplineManagerLinks";
 import type { UserRole } from "@/types";
 
-const VALID_ROLES: UserRole[] = ["admin", "manager", "supervisor", "staff", "stakeholder", "tenant"];
+const VALID_ROLES: UserRole[] = ["admin", "manager", "supervisor", "staff", "upline_manager", "tenant"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [user, setUser] = useState<{ email: string; full_name: string; role: UserRole } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -17,6 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let cancelled = false;
 
     (async () => {
+      // 1. Try API auth
       try {
         const apiUser = await getMe();
         if (apiUser && !cancelled) {
@@ -29,6 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       } catch {}
 
+      // 2. Try JWT token decode
       try {
         const raw = localStorage.getItem("fixflow-token");
         if (raw && !cancelled) {
@@ -43,6 +47,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       } catch {}
 
+      // 3. Try upline-manager session (no-login link)
+      try {
+        const sessionRaw = sessionStorage.getItem("fixflow-upline-manager-session");
+        if (sessionRaw && !cancelled) {
+          const session = JSON.parse(sessionRaw);
+          const link = await getLinkByToken(session.token);
+          if (link && link.status === "active") {
+            // Upline manager sessions must NOT access admin pages — redirect away
+            if (pathname.startsWith("/admin/") || pathname === "/admin") {
+              if (!cancelled) {
+                router.replace("/upline-manager");
+              }
+              setLoading(false);
+              return;
+            }
+            await updateLastAccessed(session.token);
+            setUser({
+              email: session.viewerEmail || `${session.viewerName.toLowerCase()}@upline-manager`,
+              full_name: session.viewerName,
+              role: "upline_manager",
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {}
+
+      // 4. Fallback to portal role from URL
       if (!cancelled) {
         const portalRole = pathname.split("/")[1] as UserRole;
         setUser({ email: "", full_name: "", role: VALID_ROLES.includes(portalRole) ? portalRole : "admin" });

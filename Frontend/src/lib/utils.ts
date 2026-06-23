@@ -70,7 +70,7 @@ export function getRoleColor(role: string) {
     manager: "bg-info/10 text-info",
     supervisor: "bg-warning/10 text-warning",
     staff: "bg-success/10 text-success",
-    stakeholder: "bg-accent/10 text-accent-foreground",
+    upline_manager: "bg-accent/10 text-accent-foreground",
     tenant: "bg-info/10 text-info",
   };
   return colors[role.toLowerCase()] || "bg-muted text-muted-foreground";
